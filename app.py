@@ -109,6 +109,10 @@ def clean_error(err):
                 "cookies exported from a browser where you are signed in to YouTube. "
                 + ("YouTube blocks most cloud servers, so running the app on your own computer is the reliable fix."
                    if PUBLIC_MODE else "Or pick your browser under 'Login cookies'."))
+    if "only available for registered users" in text or "login required" in text.lower():
+        return ("This video needs a login. " + ("Paste a cookies.txt export from a browser where you are logged in "
+                "to that site into the login box in Settings." if PUBLIC_MODE else
+                "Under 'Login cookies' in Settings pick the browser you are logged in with, or paste a cookies.txt export."))
     if "Requested format is not available" in text:
         return ("No downloadable stream was available for that choice. Try 'Best quality' or 'Audio only'. "
                 + ("On a hosted server YouTube often hides all streams from the server's address even when "
