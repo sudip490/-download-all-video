@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Supported sites · Video Downloader</title>
+<style>
+  :root { --bg:#0f172a; --card:#1e293b; --border:#334155; --text:#e2e8f0; --muted:#94a3b8; --accent:#3b82f6; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; background:var(--bg);
+         color:var(--text); min-height:100vh; display:flex; flex-direction:column; align-items:center; padding:48px 16px; }
+  .wrap { width:100%; max-width:860px; }
+  h1 { margin:0 0 6px; font-size:1.9rem; }
+  .sub { color:var(--muted); margin:0 0 20px; }
+  a { color:var(--accent); }
+  input { width:100%; padding:12px 14px; border-radius:8px; border:1px solid var(--border);
+          background:var(--card); color:var(--text); font-size:1rem; }
+  input:focus { outline:2px solid var(--accent); border-color:transparent; }
+  .note { margin:16px 0; padding:12px 14px; border-radius:8px; background:var(--card); border:1px solid var(--border);
+          color:var(--muted); font-size:.9rem; line-height:1.5; }
+  .count { color:var(--muted); font-size:.9rem; margin:12px 0 8px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(150px, 1fr)); gap:6px; }
+  .grid span { padding:7px 10px; border-radius:6px; background:var(--card); border:1px solid var(--border);
+               font-size:.9rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .grid span[hidden] { display:none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Supported sites</h1>
+  <p class="sub"><a href="/">← Back to downloader</a></p>
+
+  <input id="q" type="search" placeholder="Search sites, e.g. youtube, facebook, tiktok…" autofocus autocomplete="off">
+
+  <div class="note">
+    These are the names yt-dlp recognises. Popular ones include YouTube, Facebook, Instagram, TikTok, Twitter/X, Vimeo,
+    Dailymotion, Reddit, Twitch, SoundCloud, Pinterest, LinkedIn, Telegram and VK.<br>
+    Streaming services with copy protection (Netflix, Prime Video, Hotstar premium, SonyLIV premium and similar)
+    are listed but will not download. Some sites also need you to be logged in.
+  </div>
+
+  <p class="count"><span id="shown">{{ count }}</span> of {{ count }} sites</p>
+  <div class="grid" id="grid">
+    {% for name in sites %}<span>{{ name }}</span>{% endfor %}
+  </div>
+</div>
+
+<script>
+const items = Array.from(document.querySelectorAll('#grid span'));
+const shown = document.getElementById('shown');
+document.getElementById('q').addEventListener('input', (e) => {
+  const q = e.target.value.trim().toLowerCase();
+  let n = 0;
+  for (const el of items) {
+    const hit = !q || el.textContent.toLowerCase().includes(q);
+    el.hidden = !hit;
+    if (hit) n++;
+  }
+  shown.textContent = n;
+});
+</script>
+</body>
+</html>
