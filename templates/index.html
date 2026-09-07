@@ -187,7 +187,7 @@
 
 <script>
 const $ = (s) => document.querySelector(s);
-const S = { cur: null, timer: null, fmt: null, mode: 'single', kind: 'video' };
+const S = { cur: null, timer: null, fmt: null, mode: 'single', kind: 'video', public: false };
 const HEIGHTS = [2160, 1440, 1080, 720, 480, 360, 240, 144];
 
 function showError(t) { $('#error').textContent = t; $('#error').hidden = false; $('#notice').hidden = true; }
@@ -227,6 +227,7 @@ try { $('#impersonate').checked = localStorage.getItem('impersonate') === '1'; }
 $('#impersonate').addEventListener('change', () => { try { localStorage.setItem('impersonate', $('#impersonate').checked ? '1' : ''); } catch (e) {} });
 function conn() {
   const c = { cookies: $('#cookies').value, proxy: $('#proxy').value.trim(), impersonate: $('#impersonate').checked };
+  if (S.public) c.cookies = $('#cookiesText').value.trim() ? 'paste' : '';  // hosted: the box decides
   if (c.cookies === 'paste') c.cookies_text = $('#cookiesText').value;
   return c;
 }
@@ -240,8 +241,11 @@ async function loadSettings() {
   $('#cookies option[value=file]').textContent = s.cookies_file ? 'cookies.txt file' : 'cookies.txt file (not found)';
   if (s.public) {
     // Hosted on a server: browser cookies, save-folder and self-update are not available.
-    for (const o of $('#cookies').options) if (o.value && o.value !== 'file' && o.value !== 'paste') o.hidden = true;
-    if ($('#cookies').value && !['file', 'paste'].includes($('#cookies').value)) { $('#cookies').value = ''; syncCookieField(); }
+    // Login is done only by pasting cookies.txt text, so show that box always and hide the dropdown.
+    S.public = true;
+    $('#cookies').closest('.field').hidden = true;
+    $('#cookiesTextField').hidden = false;
+    $('#cookiesTextField').querySelector('label').textContent = 'Login cookies (optional): paste the contents of a cookies.txt file here for sites that need you to be logged in';
     $('#saveDir').closest('.field').hidden = true;
     $('#updBtn').hidden = true;
     const limits = [];

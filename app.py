@@ -519,6 +519,14 @@ def require_password():
     return Response("Password required.", 401, {"WWW-Authenticate": 'Basic realm="Video Downloader"'})
 
 
+@app.after_request
+def no_cache(resp):
+    """Pages and API answers must never be cached, so a new deploy shows up on the next reload."""
+    if resp.mimetype in ("text/html", "application/json"):
+        resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
 @app.get("/healthz")
 def healthz():
     commit = os.environ.get("RENDER_GIT_COMMIT", "")[:7]  # set by Render, lets us see which build is live
