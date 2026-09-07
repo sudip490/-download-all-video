@@ -1,5 +1,6 @@
 """Local video downloader: paste a link, pick options, get the file(s)."""
 import hmac
+import json
 import os
 import re
 import shutil
@@ -176,6 +177,39 @@ def validate_save_dir(value):
 MAX_COOKIE_TEXT = 256 * 1024
 
 
+def json_cookies_to_netscape(text):
+    """Browser extensions often export cookies as JSON. Convert that to the Netscape cookies.txt format."""
+    try:
+        data = json.loads(text)
+    except ValueError:
+        return None
+    if isinstance(data, dict) and isinstance(data.get("cookies"), list):
+        data = data["cookies"]
+    if not isinstance(data, list):
+        return None
+    lines = ["# Netscape HTTP Cookie File"]
+    for c in data:
+        if not isinstance(c, dict) or not c.get("name") or not c.get("domain"):
+            continue
+        domain = str(c["domain"])
+        if c.get("hostOnly") is False and not domain.startswith("."):
+            domain = "." + domain
+        try:
+            expiry = int(float(c.get("expirationDate") or c.get("expires") or 0))
+        except (TypeError, ValueError):
+            expiry = 0
+        lines.append("\t".join([
+            ("#HttpOnly_" if c.get("httpOnly") else "") + domain,
+            "TRUE" if domain.startswith(".") else "FALSE",
+            str(c.get("path") or "/"),
+            "TRUE" if c.get("secure") else "FALSE",
+            str(expiry),
+            str(c["name"]),
+            str(c.get("value", "")),
+        ]))
+    return "\n".join(lines) if len(lines) > 1 else None
+
+
 def cookie_opts(source, text="", work_dir=None):
     """source is '' (no login), 'file' (cookies.txt next to app.py), 'paste' (cookies.txt text sent
     from the page, written into work_dir) or a browser name."""
@@ -192,6 +226,8 @@ def cookie_opts(source, text="", work_dir=None):
             raise ValueError("Paste the contents of your cookies.txt file in Settings first.")
         if len(text) > MAX_COOKIE_TEXT:
             raise ValueError("The pasted cookies text is too large.")
+        if text[0] in "[{":
+            text = json_cookies_to_netscape(text) or text
         looks_ok = text.startswith("# Netscape HTTP Cookie File") or text.startswith("# HTTP Cookie File") or any(
             len(line.split("\t")) == 7 for line in text.splitlines() if line and not line.startswith("#"))
         if not looks_ok:
