@@ -102,6 +102,12 @@ def clean_error(err):
     text = str(err).strip()
     text = re.sub(r"^ERROR:\s*", "", text)
     text = re.sub(r"^\[[^\]]+\]\s*[^:]*:\s*", "", text)  # drop "[site] id:" prefix
+    if "confirm you" in text and "not a bot" in text:
+        where = "this server" if PUBLIC_MODE else "this computer"
+        return (f"YouTube is blocking {where} as a bot. In Settings choose 'Paste cookies.txt text' and paste "
+                "cookies exported from a browser where you are signed in to YouTube. "
+                + ("YouTube blocks most cloud servers, so running the app on your own computer is the reliable fix."
+                   if PUBLIC_MODE else "Or pick your browser under 'Login cookies'."))
     return text or "Something went wrong."
 
 
