@@ -9,7 +9,12 @@ Powered by [yt-dlp](https://github.com/yt-dlp/yt-dlp) and ffmpeg.
 ./start.sh
 ```
 
-Then open http://127.0.0.1:5000 in your browser.
+This starts the app in the background and opens http://127.0.0.1:5000 in your browser. Stop it with `./stop.sh`.
+
+**One-click on Linux:** run `./install-launcher.sh` once. "Video Downloader" then appears in your application
+menu, and the app starts by itself at login so the address is always ready. Remove with `./install-launcher.sh --remove`.
+
+YouTube works here without any login, because your home connection is not blocked the way cloud servers are.
 
 ## What it can do
 
