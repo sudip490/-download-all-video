@@ -1,9 +1,16 @@
 FROM python:3.12-slim
 
-# ffmpeg merges video + audio, converts audio, embeds subtitles and thumbnails
+# ffmpeg merges video + audio, converts audio, embeds subtitles and thumbnails.
+# Deno is the JavaScript runtime yt-dlp needs to solve YouTube's player challenges.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ffmpeg \
-    && rm -rf /var/lib/apt/lists/*
+    && apt-get install -y --no-install-recommends ffmpeg curl unzip ca-certificates \
+    && curl -fsSL https://github.com/denoland/deno/releases/latest/download/deno-x86_64-unknown-linux-gnu.zip -o /tmp/deno.zip \
+    && unzip -q /tmp/deno.zip -d /usr/local/bin \
+    && chmod +x /usr/local/bin/deno \
+    && rm -f /tmp/deno.zip \
+    && apt-get purge -y unzip \
+    && rm -rf /var/lib/apt/lists/* \
+    && deno --version
 
 WORKDIR /app
 COPY requirements.txt .

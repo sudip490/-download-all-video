@@ -262,6 +262,10 @@ def connection_opts(data, work_dir=None):
         opts["proxy"] = proxy
     if data.get("impersonate"):
         opts["impersonate"] = ImpersonateTarget.from_str("chrome")
+    if PUBLIC_MODE:
+        # A server cannot produce YouTube's "PO token", and yt-dlp then drops every stream that wants one.
+        # Keep those streams anyway; with a pasted login they often still download.
+        opts["extractor_args"] = {"youtube": {"formats": ["missing_pot"]}}
     return opts
 
 
