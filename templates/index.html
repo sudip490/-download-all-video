@@ -92,7 +92,7 @@
     <summary>Settings <span class="spacer"></span> <span>yt-dlp <span id="ver">…</span></span> <button id="updBtn" class="small" type="button">Update</button></summary>
     <div class="grid2">
       <div class="field"><label>Login cookies</label>
-        <select id="cookies">
+        <select id="loginSource">
           <option value="">Not needed</option>
           <option value="file">cookies.txt file</option>
           <option value="paste">Paste cookies.txt text</option>
@@ -108,9 +108,9 @@
       <div class="field"><label>Also save a copy to this folder (optional)</label><input id="saveDir" placeholder="/home/you/Videos"></div>
       <div class="field"><label>Blocked by the site?</label><label class="chk"><input type="checkbox" id="impersonate"> Pretend to be Chrome</label></div>
     </div>
-    <div class="field" id="cookiesTextField" hidden style="margin-top:10px">
+    <div class="field" id="loginTextField" hidden style="margin-top:10px">
       <label>cookies.txt contents (kept only in this browser)</label>
-      <textarea id="cookiesText" rows="4" style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);font-family:monospace;font-size:.8rem" placeholder="# Netscape HTTP Cookie File&#10;.udemy.com&#9;TRUE&#9;/&#9;TRUE&#9;..."></textarea>
+      <textarea id="loginText" rows="5" style="display:block;min-height:120px;width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);font-family:monospace;font-size:.8rem" placeholder="# Netscape HTTP Cookie File&#10;.udemy.com&#9;TRUE&#9;/&#9;TRUE&#9;..."></textarea>
       <p class="hint">Log in to the site in your browser, export cookies with the "Get cookies.txt LOCALLY" extension, open the file, copy everything and paste it here.</p>
     </div>
     <p class="hint" id="settingsHint">Cookies unlock private, age-restricted or followers-only videos. Impersonation helps with sites that block downloaders.</p>
@@ -219,33 +219,34 @@ async function api(path, body) {
 }
 
 // ---- settings (remembered in this browser) ----
-for (const id of ['cookies', 'proxy', 'saveDir', 'cookiesText']) {
+for (const id of ['loginSource', 'proxy', 'saveDir', 'loginText']) {
   try { $('#' + id).value = localStorage.getItem(id) || ''; } catch (e) {}
   $('#' + id).addEventListener('change', () => { try { localStorage.setItem(id, $('#' + id).value); } catch (e) {} });
 }
 try { $('#impersonate').checked = localStorage.getItem('impersonate') === '1'; } catch (e) {}
 $('#impersonate').addEventListener('change', () => { try { localStorage.setItem('impersonate', $('#impersonate').checked ? '1' : ''); } catch (e) {} });
 function conn() {
-  const c = { cookies: $('#cookies').value, proxy: $('#proxy').value.trim(), impersonate: $('#impersonate').checked };
-  if (S.public) c.cookies = $('#cookiesText').value.trim() ? 'paste' : '';  // hosted: the box decides
-  if (c.cookies === 'paste') c.cookies_text = $('#cookiesText').value;
+  const c = { cookies: $('#loginSource').value, proxy: $('#proxy').value.trim(), impersonate: $('#impersonate').checked };
+  if (S.public) c.cookies = $('#loginText').value.trim() ? 'paste' : '';  // hosted: the box decides
+  if (c.cookies === 'paste') c.cookies_text = $('#loginText').value;
   return c;
 }
-function syncCookieField() { $('#cookiesTextField').hidden = $('#cookies').value !== 'paste'; }
-$('#cookies').addEventListener('change', syncCookieField);
+function syncCookieField() { $('#loginTextField').hidden = $('#loginSource').value !== 'paste'; }
+$('#loginSource').addEventListener('change', syncCookieField);
 syncCookieField();
 
 async function loadSettings() {
   const s = await api('/api/settings');
   $('#ver').textContent = s.ytdlp_version;
-  $('#cookies option[value=file]').textContent = s.cookies_file ? 'cookies.txt file' : 'cookies.txt file (not found)';
+  $('#loginSource option[value=file]').textContent = s.cookies_file ? 'cookies.txt file' : 'cookies.txt file (not found)';
   if (s.public) {
     // Hosted on a server: browser cookies, save-folder and self-update are not available.
     // Login is done only by pasting cookies.txt text, so show that box always and hide the dropdown.
     S.public = true;
-    $('#cookies').closest('.field').hidden = true;
-    $('#cookiesTextField').hidden = false;
-    $('#cookiesTextField').querySelector('label').textContent = 'Login cookies (optional): paste the contents of a cookies.txt file here for sites that need you to be logged in';
+    $('.foot').firstChild.textContent = 'Hosted copy · ';
+    $('#loginSource').closest('.field').hidden = true;
+    $('#loginTextField').hidden = false;
+    $('#loginTextField').querySelector('label').textContent = 'Login cookies (optional): paste the contents of a cookies.txt file here for sites that need you to be logged in';
     $('#saveDir').closest('.field').hidden = true;
     $('#updBtn').hidden = true;
     const limits = [];
