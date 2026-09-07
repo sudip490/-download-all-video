@@ -109,6 +109,11 @@ def clean_error(err):
                 "cookies exported from a browser where you are signed in to YouTube. "
                 + ("YouTube blocks most cloud servers, so running the app on your own computer is the reliable fix."
                    if PUBLIC_MODE else "Or pick your browser under 'Login cookies'."))
+    if "Requested format is not available" in text:
+        return ("No downloadable stream was available for that choice. Try 'Best quality' or 'Audio only'. "
+                + ("On a hosted server YouTube often hides all streams from the server's address even when "
+                   "logged in; the app on your own computer does not have this problem." if PUBLIC_MODE
+                   else "If the site lists no qualities at all, it may be blocking downloads."))
     if "Unable to extract course id" in text:
         return ("Udemy did not show the course page. On a hosted server this means Udemy's protection is "
                 "blocking the server address; use the app on your own computer for Udemy. It also happens when "
@@ -395,6 +400,11 @@ def video_payload(info, url):
         })
     formats.sort(key=lambda f: (f["height"] or 0, f["tbr"] or 0), reverse=True)
     heights = sorted({f["height"] for f in formats if f["height"] and f["video"]}, reverse=True)
+    if not formats:
+        raise ValueError("The site returned no downloadable streams for this video. "
+                         + ("YouTube does this for cloud server addresses even when logged in; "
+                            "use the app on your own computer for that video." if PUBLIC_MODE
+                            else "The video may be blocked, private, or still processing."))
 
     def sub_name(lang, entries):
         return (entries[0].get("name") if entries else None) or lang
@@ -662,7 +672,10 @@ def info_response(data, text, work_dir):
                        uploader=info.get("uploader") or info.get("channel"), site=info.get("extractor_key"),
                        url=info.get("webpage_url") or target, entries=entries,
                        truncated=len(entries) >= MAX_PLAYLIST)
-    return jsonify(video_payload(info, target))
+    try:
+        return jsonify(video_payload(info, target))
+    except ValueError as e:
+        return jsonify(error=str(e)), 400
 
 
 @app.post("/api/download")
