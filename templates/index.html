@@ -95,6 +95,7 @@
         <select id="cookies">
           <option value="">Not needed</option>
           <option value="file">cookies.txt file</option>
+          <option value="paste">Paste cookies.txt text</option>
           <option value="firefox">From Firefox</option>
           <option value="chrome">From Chrome</option>
           <option value="chromium">From Chromium</option>
@@ -106,6 +107,11 @@
       <div class="field"><label>Proxy (optional)</label><input id="proxy" placeholder="http://host:port or socks5://host:port"></div>
       <div class="field"><label>Also save a copy to this folder (optional)</label><input id="saveDir" placeholder="/home/you/Videos"></div>
       <div class="field"><label>Blocked by the site?</label><label class="chk"><input type="checkbox" id="impersonate"> Pretend to be Chrome</label></div>
+    </div>
+    <div class="field" id="cookiesTextField" hidden style="margin-top:10px">
+      <label>cookies.txt contents (kept only in this browser)</label>
+      <textarea id="cookiesText" rows="4" style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);font-family:monospace;font-size:.8rem" placeholder="# Netscape HTTP Cookie File&#10;.udemy.com&#9;TRUE&#9;/&#9;TRUE&#9;..."></textarea>
+      <p class="hint">Log in to the site in your browser, export cookies with the "Get cookies.txt LOCALLY" extension, open the file, copy everything and paste it here.</p>
     </div>
     <p class="hint" id="settingsHint">Cookies unlock private, age-restricted or followers-only videos. Impersonation helps with sites that block downloaders.</p>
     <p class="hint" id="publicNote" hidden></p>
@@ -213,13 +219,20 @@ async function api(path, body) {
 }
 
 // ---- settings (remembered in this browser) ----
-for (const id of ['cookies', 'proxy', 'saveDir']) {
+for (const id of ['cookies', 'proxy', 'saveDir', 'cookiesText']) {
   try { $('#' + id).value = localStorage.getItem(id) || ''; } catch (e) {}
   $('#' + id).addEventListener('change', () => { try { localStorage.setItem(id, $('#' + id).value); } catch (e) {} });
 }
 try { $('#impersonate').checked = localStorage.getItem('impersonate') === '1'; } catch (e) {}
 $('#impersonate').addEventListener('change', () => { try { localStorage.setItem('impersonate', $('#impersonate').checked ? '1' : ''); } catch (e) {} });
-function conn() { return { cookies: $('#cookies').value, proxy: $('#proxy').value.trim(), impersonate: $('#impersonate').checked }; }
+function conn() {
+  const c = { cookies: $('#cookies').value, proxy: $('#proxy').value.trim(), impersonate: $('#impersonate').checked };
+  if (c.cookies === 'paste') c.cookies_text = $('#cookiesText').value;
+  return c;
+}
+function syncCookieField() { $('#cookiesTextField').hidden = $('#cookies').value !== 'paste'; }
+$('#cookies').addEventListener('change', syncCookieField);
+syncCookieField();
 
 async function loadSettings() {
   const s = await api('/api/settings');
@@ -227,8 +240,8 @@ async function loadSettings() {
   $('#cookies option[value=file]').textContent = s.cookies_file ? 'cookies.txt file' : 'cookies.txt file (not found)';
   if (s.public) {
     // Hosted on a server: browser cookies, save-folder and self-update are not available.
-    for (const o of $('#cookies').options) if (o.value && o.value !== 'file') o.hidden = true;
-    if ($('#cookies').value && $('#cookies').value !== 'file') $('#cookies').value = '';
+    for (const o of $('#cookies').options) if (o.value && o.value !== 'file' && o.value !== 'paste') o.hidden = true;
+    if ($('#cookies').value && !['file', 'paste'].includes($('#cookies').value)) { $('#cookies').value = ''; syncCookieField(); }
     $('#saveDir').closest('.field').hidden = true;
     $('#updBtn').hidden = true;
     const limits = [];

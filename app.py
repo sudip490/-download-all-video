@@ -4,6 +4,7 @@ import os
 import re
 import shutil
 import subprocess
+import tempfile
 import sys
 import threading
 import time
@@ -160,8 +161,12 @@ def validate_save_dir(value):
 
 # ---------- yt-dlp option builders ----------
 
-def cookie_opts(source):
-    """source is '' (no login), 'file' (cookies.txt next to app.py) or a browser name."""
+MAX_COOKIE_TEXT = 256 * 1024
+
+
+def cookie_opts(source, text="", work_dir=None):
+    """source is '' (no login), 'file' (cookies.txt next to app.py), 'paste' (cookies.txt text sent
+    from the page, written into work_dir) or a browser name."""
     if not source:
         return {}
     if source == "file":
@@ -169,6 +174,22 @@ def cookie_opts(source):
             raise ValueError("cookies.txt was not found next to app.py. "
                              "Export it from your browser first (see README).")
         return {"cookiefile": str(COOKIES_FILE)}
+    if source == "paste":
+        text = str(text or "").strip()
+        if not text:
+            raise ValueError("Paste the contents of your cookies.txt file in Settings first.")
+        if len(text) > MAX_COOKIE_TEXT:
+            raise ValueError("The pasted cookies text is too large.")
+        looks_ok = text.startswith("# Netscape HTTP Cookie File") or text.startswith("# HTTP Cookie File") or any(
+            len(line.split("\t")) == 7 for line in text.splitlines() if line and not line.startswith("#"))
+        if not looks_ok:
+            raise ValueError("That does not look like a cookies.txt file. Export it with a "
+                             "'Get cookies.txt LOCALLY' browser extension and paste the whole file.")
+        if work_dir is None:
+            raise ValueError("Internal error: no work folder for cookies.")
+        path = Path(work_dir) / "_cookies.txt"
+        path.write_text(text + "\n")
+        return {"cookiefile": str(path)}
     if source in BROWSERS:
         if PUBLIC_MODE:
             raise ValueError("Browser cookies are not available on a hosted server. Use a cookies.txt file.")
@@ -176,11 +197,11 @@ def cookie_opts(source):
     raise ValueError("Unknown cookie source.")
 
 
-def connection_opts(data):
+def connection_opts(data, work_dir=None):
     """Options shared by every yt-dlp call: cookies, proxy, impersonation, speed."""
     opts = {"quiet": True, "no_warnings": True, "logger": QuietLogger(),
             "concurrent_fragment_downloads": 4, "geo_bypass": True}
-    opts.update(cookie_opts(str(data.get("cookies") or "")))
+    opts.update(cookie_opts(str(data.get("cookies") or ""), data.get("cookies_text"), work_dir))
     proxy = str(data.get("proxy") or "").strip()
     if proxy:
         if not re.match(r"^(https?|socks[45]h?)://\S+$", proxy):
@@ -354,7 +375,8 @@ def update(job_id, **fields):
 
 def collect_files(job_dir):
     return sorted(p for p in job_dir.iterdir()
-                  if p.is_file() and not p.name.lower().endswith(SKIP_SUFFIXES))
+                  if p.is_file() and not p.name.startswith("_")
+                  and not p.name.lower().endswith(SKIP_SUFFIXES))
 
 
 def run_job(job_id, job_dir, urls, base, o, playlist):
@@ -545,8 +567,16 @@ def api_info():
     text = str(data.get("url") or "").strip()
     if not text:
         return jsonify(error="Paste a link or type something to search."), 400
+    work_dir = Path(tempfile.mkdtemp(prefix="_info-", dir=DOWNLOAD_DIR))
     try:
-        opts = connection_opts(data)
+        return info_response(data, text, work_dir)
+    finally:
+        shutil.rmtree(work_dir, ignore_errors=True)
+
+
+def info_response(data, text, work_dir):
+    try:
+        opts = connection_opts(data, work_dir)
     except ValueError as e:
         return jsonify(error=str(e)), 400
     opts["skip_download"] = True
@@ -591,23 +621,25 @@ def api_download():
     playlist = bool(data.get("playlist"))
     if playlist and len(urls) != 1:
         return jsonify(error="A playlist download takes exactly one link."), 400
-    try:
-        base = connection_opts(data)
-        validate_save_dir(o.get("save_dir"))
-        ydl_options(DOWNLOAD_DIR, base, o, playlist)  # validate the options up front
-    except ValueError as e:
-        return jsonify(error=str(e)), 400
     job_id = uuid.uuid4().hex
+    job_dir = DOWNLOAD_DIR / job_id
+    job_dir.mkdir()
+    try:
+        base = connection_opts(data, job_dir)
+        validate_save_dir(o.get("save_dir"))
+        ydl_options(job_dir, base, o, playlist)  # validate the options up front
+    except ValueError as e:
+        shutil.rmtree(job_dir, ignore_errors=True)
+        return jsonify(error=str(e)), 400
     with jobs_lock:
         running = sum(1 for j in jobs.values() if j["status"] not in ("done", "error"))
         if MAX_JOBS and running >= MAX_JOBS:
+            shutil.rmtree(job_dir, ignore_errors=True)
             return jsonify(error=f"{running} download(s) already running on this server. "
                                  "Please wait a minute and try again."), 429
         jobs[job_id] = {"status": "starting", "progress": 0, "message": "Starting…", "files": [],
                         "item": 0, "total": None, "created": time.time(),
                         "title": str(o.get("title") or urls[0])[:200]}
-    job_dir = DOWNLOAD_DIR / job_id
-    job_dir.mkdir()
     threading.Thread(target=run_job, args=(job_id, job_dir, urls, base, o, playlist), daemon=True).start()
     return jsonify(job_id=job_id)
 

@@ -43,6 +43,9 @@ Private, age-restricted or followers-only videos need your login. Two ways:
 1. **From your browser** – open Settings on the page and choose the browser you are logged into (Firefox works best on Linux).
 2. **cookies.txt file** – install a browser extension such as "Get cookies.txt LOCALLY", export cookies for the site,
    save the file as `cookies.txt` next to `app.py`, then choose "cookies.txt file" in Settings.
+3. **Paste cookies.txt text** – the same export, but open the file, copy everything and paste it into the box that
+   appears in Settings. This is the way to log in on a hosted copy of the app. The text is remembered only in your
+   own browser and is sent to the server with each request.
 
 ## Keep yt-dlp fresh
 
@@ -77,7 +80,7 @@ Every `git push` to the repo redeploys automatically, which is also how yt-dlp g
 | Downloads at once  | 2                      | `MAX_JOBS`             |
 | Playlist size      | 50 videos              | `MAX_PLAYLIST`         |
 | Files kept for     | 30 minutes             | `JOB_TTL_MINUTES`      |
-| Browser cookies, save-to-folder, self-update | off | (only in local mode) |
+| Browser cookies, save-to-folder, self-update | off | (only in local mode; cookies.txt paste still works) |
 
 Things to know about hosting:
 
