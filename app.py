@@ -27,7 +27,10 @@ if "/.var/app/" in os.environ.get("XDG_CONFIG_HOME", ""):
 
 BASE_DIR = Path(__file__).resolve().parent
 DOWNLOAD_DIR = BASE_DIR / "downloads"
-COOKIES_FILE = BASE_DIR / "cookies.txt"
+# A cookies.txt placed here (or wherever COOKIES_FILE points) becomes the site's built-in login:
+# it is used for every request that does not bring its own cookies. On Render, upload it as a
+# Secret File and set COOKIES_FILE=/etc/secrets/cookies.txt
+COOKIES_FILE = Path(os.environ.get("COOKIES_FILE") or (BASE_DIR / "cookies.txt")).expanduser()
 DOWNLOAD_DIR.mkdir(exist_ok=True)
 
 # ---- hosting configuration (environment variables) ----
@@ -223,12 +226,18 @@ def cookie_opts(source, text="", work_dir=None):
     """source is '' (no login), 'file' (cookies.txt next to app.py), 'paste' (cookies.txt text sent
     from the page, written into work_dir) or a browser name."""
     if not source:
+        # No login chosen: fall back to the site's built-in cookies file when there is one.
+        if COOKIES_FILE.is_file() and work_dir is not None:
+            return cookie_opts("paste", COOKIES_FILE.read_text(errors="replace"), work_dir)
         return {}
     if source == "file":
         if not COOKIES_FILE.is_file():
-            raise ValueError("cookies.txt was not found next to app.py. "
+            raise ValueError(f"No cookies file was found at {COOKIES_FILE}. "
                              "Export it from your browser first (see README).")
-        return {"cookiefile": str(COOKIES_FILE)}
+        if work_dir is None:
+            return {"cookiefile": str(COOKIES_FILE)}
+        # work on a private copy so parallel jobs never write to the shared file
+        return cookie_opts("paste", COOKIES_FILE.read_text(errors="replace"), work_dir)
     if source == "paste":
         text = str(text or "").strip()
         if not text:
@@ -369,6 +378,25 @@ def ydl_options(job_dir, base, o, playlist):
 
     opts["postprocessors"] = pps
     return opts
+
+
+def server_login_sites():
+    """Domains covered by the built-in cookies file, e.g. ['facebook.com', 'youtube.com']."""
+    if not COOKIES_FILE.is_file():
+        return []
+    text = COOKIES_FILE.read_text(errors="replace").strip()
+    if text[:1] in "[{":
+        text = json_cookies_to_netscape(text) or ""
+    sites = set()
+    for line in text.splitlines():
+        parts = line.split("\t")
+        if len(parts) != 7:
+            continue
+        domain = parts[0].replace("#HttpOnly_", "").lstrip(".").lower()
+        labels = domain.split(".")
+        if len(labels) >= 2:
+            sites.add(".".join(labels[-2:]))
+    return sorted(sites)[:12]
 
 
 # ---------- info payloads ----------
@@ -608,7 +636,7 @@ def api_settings():
     return jsonify(ytdlp_version=yt_dlp.version.__version__, cookies_file=COOKIES_FILE.is_file(),
                    browsers=list(BROWSERS), sites=len(SITES), public=PUBLIC_MODE,
                    max_filesize_mb=MAX_FILESIZE_MB, max_playlist=MAX_PLAYLIST, max_jobs=MAX_JOBS,
-                   ttl_minutes=JOB_TTL_SECONDS // 60)
+                   ttl_minutes=JOB_TTL_SECONDS // 60, server_login_sites=server_login_sites())
 
 
 @app.post("/api/update")

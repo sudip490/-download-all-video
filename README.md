@@ -52,6 +52,26 @@ Private, age-restricted or followers-only videos need your login. Two ways:
    appears in Settings. This is the way to log in on a hosted copy of the app. The text is remembered only in your
    own browser and is sent to the server with each request.
 
+## Built-in login for the hosted site (works like fdown / fastdl)
+
+Sites such as fdown.net or fastdl.app never ask visitors for cookies because the site itself is signed in with an
+account the owner provides. You can do the same:
+
+1. Create a **spare** account on the site (Facebook, Instagram, YouTube, …). Do not use your main account: it is
+   shared by every visitor and may get locked.
+2. Sign in with it in a private browser window, export cookies with the "Get cookies.txt LOCALLY" extension, and
+   close the window without signing out.
+3. On Render open your service → **Environment** → **Secret Files** → **Add Secret File**.
+   Filename: `cookies.txt`. Contents: paste the exported text (Netscape or JSON format both work). Save.
+4. Still under Environment, add the variable `COOKIES_FILE` with the value `/etc/secrets/cookies.txt`. Save, and
+   Render redeploys.
+
+The Settings panel will then say "This site has a built-in login for facebook.com, instagram.com, …" and visitors
+can download from those sites without pasting anything. A visitor who pastes their own cookies still overrides it.
+When the login stops working (sites rotate sessions), export again and update the secret file.
+
+On your own computer the same thing happens with a `cookies.txt` placed next to `app.py`.
+
 ## Keep yt-dlp fresh
 
 Sites change often. When a link that used to work stops working, click **Update** in Settings on the page.

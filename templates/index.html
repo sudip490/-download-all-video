@@ -257,6 +257,12 @@ async function loadSettings() {
     $('#publicNote').textContent = 'Hosted mode: ' + limits.join(', ') + '.';
     $('#publicNote').hidden = false;
   }
+  if (s.server_login_sites && s.server_login_sites.length) {
+    const n = document.createElement('p'); n.className = 'hint'; n.style.color = 'var(--ok)';
+    n.textContent = 'This site has a built-in login for ' + s.server_login_sites.join(', ') + '. No cookies needed for those.';
+    $('#settingsHint').before(n);
+    $('#loginTextField').querySelector('label').textContent = 'Login cookies (optional, for other sites): paste the contents of a cookies.txt file here';
+  }
 }
 loadSettings().catch(() => { $('#ver').textContent = '?'; });
 
