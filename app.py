@@ -1,4 +1,4 @@
-"""Local video downloader: paste a link, pick a quality, get the file."""
+"""Local video downloader: paste a link, pick options, get the file(s)."""
 import os
 import re
 import shutil
@@ -7,12 +7,20 @@ import sys
 import threading
 import time
 import uuid
+import zipfile
 from pathlib import Path
 
 import yt_dlp
 from yt_dlp.extractor import gen_extractor_classes
+from yt_dlp.networking.impersonate import ImpersonateTarget
+from yt_dlp.utils import download_range_func
 from flask import Flask, abort, jsonify, render_template, request, send_file
 from werkzeug.serving import make_server
+
+# If launched from inside a Flatpak app (for example VS Code's terminal), XDG_CONFIG_HOME points at the
+# sandbox's config folder and browser cookies would not be found. Point it back at the real one.
+if "/.var/app/" in os.environ.get("XDG_CONFIG_HOME", ""):
+    os.environ["XDG_CONFIG_HOME"] = str(Path.home() / ".config")
 
 BASE_DIR = Path(__file__).resolve().parent
 DOWNLOAD_DIR = BASE_DIR / "downloads"
@@ -21,6 +29,28 @@ DOWNLOAD_DIR.mkdir(exist_ok=True)
 JOB_TTL_SECONDS = 60 * 60  # finished downloads are deleted after one hour
 BROWSERS = ("firefox", "chrome", "chromium", "brave", "edge", "opera", "vivaldi", "safari")
 YTDLP_PACKAGE = "yt-dlp[default,curl-cffi,secretstorage]"
+CONTAINERS = ("mp4", "mkv", "webm", "original")
+AUDIO_FORMATS = ("mp3", "m4a", "opus", "flac", "wav", "original")
+SPONSOR_CATEGORIES = ["sponsor", "selfpromo", "interaction", "intro", "outro", "preview", "music_offtopic"]
+THUMB_OK = {"mp3", "mkv", "mka", "ogg", "opus", "flac", "m4a", "mp4", "m4v", "mov"}
+SKIP_SUFFIXES = (".part", ".ytdl", ".webp", ".jpg", ".jpeg", ".png", ".json", ".zip", ".temp")
+MAX_BATCH = 50
+MAX_PLAYLIST = 300
+MAX_HISTORY = 50
+SAVE_ROOTS = (Path.home(), Path("/media"), Path("/mnt"), Path("/run/media"))
+PP_NAMES = {
+    "FFmpegMerger": "Merging video and audio",
+    "FFmpegExtractAudio": "Converting audio",
+    "FFmpegVideoRemuxer": "Changing container",
+    "FFmpegSubtitlesConvertor": "Converting subtitles",
+    "FFmpegEmbedSubtitle": "Embedding subtitles",
+    "SponsorBlock": "Checking SponsorBlock",
+    "ModifyChapters": "Removing sponsor segments",
+    "FFmpegMetadata": "Writing metadata",
+    "EmbedThumbnail": "Embedding thumbnail",
+    "FFmpegSplitChapters": "Splitting chapters",
+    "MoveFiles": "Finishing",
+}
 
 app = Flask(__name__)
 SITES = sorted({ie.IE_NAME.split(":")[0] for ie in gen_extractor_classes()
@@ -28,6 +58,7 @@ SITES = sorted({ie.IE_NAME.split(":")[0] for ie in gen_extractor_classes()
 jobs = {}
 jobs_lock = threading.Lock()
 update_lock = threading.Lock()
+zip_lock = threading.Lock()
 server = None
 restart_requested = threading.Event()
 
@@ -39,8 +70,17 @@ class QuietLogger:
     def error(self, msg): pass
 
 
+# ---------- small helpers ----------
+
 def valid_url(url):
     return isinstance(url, str) and re.match(r"^https?://\S+$", url.strip()) is not None
+
+
+def split_urls(text):
+    urls = re.findall(r"https?://\S+", text)
+    if not urls and re.fullmatch(r"[\w.-]+\.[a-z]{2,}(/\S*)?", text):
+        urls = ["https://" + text]  # a bare domain like youtube.com/watch?v=...
+    return urls
 
 
 def clean_error(err):
@@ -60,15 +100,49 @@ def human_size(n):
     return f"{n:.1f} TB"
 
 
-def format_selector(choice):
-    if choice == "audio":
-        return "bestaudio/best"
-    if choice.isdigit():
-        h = int(choice)
-        return (f"bestvideo*[height<={h}][ext=mp4]+bestaudio[ext=m4a]/"
-                f"bestvideo*[height<={h}]+bestaudio/best[height<={h}]/best")
-    return "bestvideo*[ext=mp4]+bestaudio[ext=m4a]/bestvideo*+bestaudio/best"
+def safe_name(name):
+    return re.sub(r'[\\/:*?"<>|\x00-\x1f]+', " ", str(name or "")).strip()[:100] or "download"
 
+
+def short_codec(codec):
+    if not codec or codec == "none":
+        return None
+    c = codec.lower()
+    for prefix, name in (("avc", "h264"), ("h264", "h264"), ("hev", "h265"), ("hvc", "h265"), ("vp09", "vp9"),
+                         ("vp9", "vp9"), ("av01", "av1"), ("mp4a", "aac"), ("opus", "opus"), ("vorbis", "vorbis")):
+        if c.startswith(prefix):
+            return name
+    return c.split(".")[0]
+
+
+def parse_time(value):
+    s = str(value or "").strip()
+    if not s:
+        return None
+    parts = s.split(":")
+    if len(parts) > 3 or not all(re.fullmatch(r"\d+(\.\d+)?", p) for p in parts):
+        raise ValueError("Clip times must look like 90, 1:30 or 0:01:30.")
+    total = 0.0
+    for p in parts:
+        total = total * 60 + float(p)
+    return total
+
+
+def validate_save_dir(value):
+    s = str(value or "").strip()
+    if not s:
+        return None
+    p = Path(s).expanduser()
+    if not p.is_absolute():
+        raise ValueError("Save folder must be a full path, for example /home/you/Videos.")
+    p = p.resolve()
+    if not any(p == root or root in p.parents for root in SAVE_ROOTS):
+        raise ValueError("Save folder must be inside your home folder or a mounted drive.")
+    p.mkdir(parents=True, exist_ok=True)
+    return p
+
+
+# ---------- yt-dlp option builders ----------
 
 def cookie_opts(source):
     """source is '' (no login), 'file' (cookies.txt next to app.py) or a browser name."""
@@ -84,11 +158,173 @@ def cookie_opts(source):
     raise ValueError("Unknown cookie source.")
 
 
-def base_opts(source):
-    opts = {"quiet": True, "no_warnings": True, "noplaylist": True, "logger": QuietLogger()}
-    opts.update(cookie_opts(source))
+def connection_opts(data):
+    """Options shared by every yt-dlp call: cookies, proxy, impersonation, speed."""
+    opts = {"quiet": True, "no_warnings": True, "logger": QuietLogger(),
+            "concurrent_fragment_downloads": 4, "geo_bypass": True}
+    opts.update(cookie_opts(str(data.get("cookies") or "")))
+    proxy = str(data.get("proxy") or "").strip()
+    if proxy:
+        if not re.match(r"^(https?|socks[45]h?)://\S+$", proxy):
+            raise ValueError("Proxy must start with http://, https:// or socks5://")
+        opts["proxy"] = proxy
+    if data.get("impersonate"):
+        opts["impersonate"] = ImpersonateTarget.from_str("chrome")
     return opts
 
+
+def build_format(fmt, kind, needs_audio, container):
+    if fmt.startswith("id:"):
+        fid = fmt[3:]
+        if not re.fullmatch(r"[A-Za-z0-9_.=+\-]+", fid):
+            raise ValueError("Bad format id.")
+        if needs_audio:
+            pref = f"{fid}+bestaudio[ext=m4a]/" if container == "mp4" else ""
+            return pref + f"{fid}+bestaudio/{fid}/best"
+        return f"{fid}/best"
+    if kind == "audio":
+        return "bestaudio/best"
+    vext, aext = {"mp4": ("mp4", "m4a"), "webm": ("webm", "webm")}.get(container, (None, None))
+    if fmt.isdigit():
+        h = int(fmt)
+        pref = f"bestvideo*[height<={h}][ext={vext}]+bestaudio[ext={aext}]/" if vext else ""
+        return pref + f"bestvideo*[height<={h}]+bestaudio/best[height<={h}]/best"
+    pref = f"bestvideo*[ext={vext}]+bestaudio[ext={aext}]/" if vext else ""
+    return pref + "bestvideo*+bestaudio/best"
+
+
+def ydl_options(job_dir, base, o, playlist):
+    """Turn the options chosen in the page into yt-dlp parameters. Raises ValueError on bad input."""
+    kind = "audio" if o.get("kind") == "audio" else "video"
+    container = o.get("container") if o.get("container") in CONTAINERS else "mp4"
+    audio_format = o.get("audio_format") if o.get("audio_format") in AUDIO_FORMATS else "mp3"
+    opts = dict(base)
+    opts.update({
+        "format": build_format(str(o.get("format") or "best"), kind, bool(o.get("needs_audio")), container),
+        "outtmpl": {
+            "default": str(job_dir / "%(playlist_index&{} - |)s%(title).100B.%(ext)s"),
+            "chapter": str(job_dir / "%(title).80B - %(section_number)02d %(section_title).60B.%(ext)s"),
+        },
+        "windowsfilenames": True,
+        "noplaylist": not playlist,
+        "ignoreerrors": "only_download" if playlist else False,
+    })
+    if playlist:
+        items = re.sub(r"\s", "", str(o.get("playlist_items") or ""))
+        if items:
+            if not re.fullmatch(r"[0-9,\-:]+", items):
+                raise ValueError("Bad playlist selection.")
+            opts["playlist_items"] = items
+        else:
+            opts["playlistend"] = MAX_PLAYLIST
+
+    pps = []
+    lang = str(o.get("subs_lang") or "").strip()
+    if lang:
+        if not re.fullmatch(r"[A-Za-z0-9._\-]+", lang):
+            raise ValueError("Bad subtitle language.")
+        opts.update({"writesubtitles": True, "writeautomaticsub": bool(o.get("subs_auto")),
+                     "subtitleslangs": [lang], "subtitlesformat": "srt/best"})
+        pps.append({"key": "FFmpegSubtitlesConvertor", "format": "srt", "when": "before_dl"})
+
+    sponsor = bool(o.get("sponsorblock"))
+    if sponsor:
+        pps.append({"key": "SponsorBlock", "categories": SPONSOR_CATEGORIES, "when": "after_filter"})
+
+    final_ext = None
+    if kind == "audio":
+        if audio_format != "original":
+            pps.append({"key": "FFmpegExtractAudio", "preferredcodec": audio_format, "preferredquality": "0"})
+            final_ext = audio_format
+    else:
+        if container != "original":
+            opts["merge_output_format"] = container
+            pps.append({"key": "FFmpegVideoRemuxer", "preferedformat": container})
+            final_ext = container
+        if lang and o.get("subs_mode") == "embed":
+            pps.append({"key": "FFmpegEmbedSubtitle", "already_have_subtitle": False})
+
+    if sponsor:
+        pps.append({"key": "ModifyChapters", "remove_sponsor_segments": SPONSOR_CATEGORIES, "force_keyframes": False})
+
+    if o.get("embed", True):
+        pps.append({"key": "FFmpegMetadata", "add_metadata": True, "add_chapters": True, "add_infojson": False})
+        if final_ext in THUMB_OK:
+            opts["writethumbnail"] = True
+            pps.append({"key": "EmbedThumbnail", "already_have_thumbnail": False})
+
+    if kind == "video" and o.get("split_chapters"):
+        pps.append({"key": "FFmpegSplitChapters", "force_keyframes": False})
+
+    start, end = parse_time(o.get("clip_start")), parse_time(o.get("clip_end"))
+    if start is not None or end is not None:
+        s = start or 0.0
+        e = end if end is not None else float("inf")
+        if e <= s:
+            raise ValueError("Clip end must be later than clip start.")
+        opts["download_ranges"] = download_range_func(None, [(s, e)])
+        opts["force_keyframes_at_cuts"] = True
+
+    opts["postprocessors"] = pps
+    return opts
+
+
+# ---------- info payloads ----------
+
+def thumb_of(e):
+    thumbs = e.get("thumbnails") or []
+    return e.get("thumbnail") or (thumbs[-1].get("url") if thumbs else None)
+
+
+def entries_of(info):
+    out = []
+    for i, e in enumerate([e for e in (info.get("entries") or []) if e], 1):
+        out.append({
+            "index": e.get("playlist_index") or i,
+            "title": e.get("title") or e.get("id") or f"Item {i}",
+            "duration": e.get("duration"),
+            "thumbnail": thumb_of(e),
+            "url": e.get("webpage_url") or e.get("url"),
+            "uploader": e.get("uploader") or e.get("channel"),
+        })
+    return out
+
+
+def video_payload(info, url):
+    formats = []
+    for f in info.get("formats") or []:
+        has_v = f.get("vcodec") not in (None, "none")
+        has_a = f.get("acodec") not in (None, "none")
+        if (not has_v and not has_a) or f.get("ext") == "mhtml" or not f.get("format_id"):
+            continue
+        formats.append({
+            "id": f["format_id"], "ext": f.get("ext"), "height": f.get("height"), "fps": f.get("fps"),
+            "vcodec": short_codec(f.get("vcodec")) if has_v else None,
+            "acodec": short_codec(f.get("acodec")) if has_a else None,
+            "size": f.get("filesize") or f.get("filesize_approx"), "tbr": f.get("tbr"),
+            "note": f.get("format_note"), "video": has_v, "audio": has_a,
+        })
+    formats.sort(key=lambda f: (f["height"] or 0, f["tbr"] or 0), reverse=True)
+    heights = sorted({f["height"] for f in formats if f["height"] and f["video"]}, reverse=True)
+
+    def sub_name(lang, entries):
+        return (entries[0].get("name") if entries else None) or lang
+    subs = [{"lang": k, "name": sub_name(k, v), "auto": False} for k, v in (info.get("subtitles") or {}).items()]
+    manual = {s["lang"] for s in subs}
+    subs += [{"lang": k, "name": sub_name(k, v), "auto": True}
+             for k, v in (info.get("automatic_captions") or {}).items() if k not in manual]
+    subs.sort(key=lambda s: (s["auto"], s["lang"]))
+    return {
+        "type": "video",
+        "title": info.get("title"), "thumbnail": thumb_of(info), "duration": info.get("duration"),
+        "uploader": info.get("uploader") or info.get("channel"), "site": info.get("extractor_key"),
+        "url": info.get("webpage_url") or url, "heights": heights, "formats": formats, "subs": subs,
+        "chapters": len(info.get("chapters") or []),
+        "in_playlist": bool(re.search(r"[?&]list=", url)) and info.get("extractor_key") == "Youtube",
+    }
+
+
+# ---------- job runner ----------
 
 def update(job_id, **fields):
     with jobs_lock:
@@ -96,49 +332,86 @@ def update(job_id, **fields):
             jobs[job_id].update(fields)
 
 
-def run_download(job_id, job_dir, url, choice, source):
+def collect_files(job_dir):
+    return sorted(p for p in job_dir.iterdir()
+                  if p.is_file() and not p.name.lower().endswith(SKIP_SUFFIXES))
+
+
+def run_job(job_id, job_dir, urls, base, o, playlist):
+    state = {"item": 0, "total": None if playlist else len(urls), "failed": 0}
+
+    def prefix():
+        item, total = state["item"], state["total"]
+        return f"Item {item} of {total} · " if total and total > 1 and item else ""
+
+    def overall(pct):
+        item, total = state["item"], state["total"]
+        if total and item:
+            return round(((item - 1) + pct / 100) / total * 100, 1)
+        return pct
+
     def hook(d):
         status = d.get("status")
+        info = d.get("info_dict") or {}
+        if playlist:
+            if info.get("playlist_autonumber"):
+                state["item"] = info["playlist_autonumber"]
+            if info.get("n_entries"):
+                state["total"] = info["n_entries"]
         if status == "downloading":
-            total = d.get("total_bytes") or d.get("total_bytes_estimate") or 0
+            tb = d.get("total_bytes") or d.get("total_bytes_estimate") or 0
             done = d.get("downloaded_bytes") or 0
-            pct = round(done / total * 100, 1) if total else 0
-            speed = d.get("speed")
-            eta = d.get("eta")
-            msg = f"Downloading… {pct}% of {human_size(total)}"
-            if speed:
-                msg += f" · {human_size(speed)}/s"
-            if eta:
-                msg += f" · {int(eta)}s left"
-            update(job_id, status="downloading", progress=pct, message=msg)
+            pct = round(done / tb * 100, 1) if tb else 0
+            msg = f"Downloading… {pct}% of {human_size(tb)}"
+            if d.get("speed"):
+                msg += f" · {human_size(d['speed'])}/s"
+            if d.get("eta"):
+                msg += f" · {int(d['eta'])}s left"
+            update(job_id, status="downloading", progress=overall(pct), message=prefix() + msg,
+                   item=state["item"], total=state["total"])
         elif status == "finished":
-            update(job_id, status="processing", progress=100, message="Processing with ffmpeg…")
+            update(job_id, status="processing", progress=overall(100), message=prefix() + "Processing…",
+                   item=state["item"], total=state["total"])
+        elif status == "error":
+            state["failed"] += 1
 
-    opts = base_opts(source)
-    opts.update({
-        "format": format_selector(choice),
-        "outtmpl": str(job_dir / "%(title).100B.%(ext)s"),
-        "progress_hooks": [hook],
-        "windowsfilenames": True,
-    })
-    if choice == "audio":
-        opts["postprocessors"] = [{
-            "key": "FFmpegExtractAudio",
-            "preferredcodec": "mp3",
-            "preferredquality": "192",
-        }]
-    else:
-        opts["merge_output_format"] = "mp4"
+    def pp_hook(d):
+        if d.get("status") in ("started", "processing"):
+            name = PP_NAMES.get(d.get("postprocessor"), d.get("postprocessor") or "Processing")
+            update(job_id, status="processing", message=f"{prefix()}{name}…")
 
     try:
+        opts = ydl_options(job_dir, base, o, playlist)
+        opts["progress_hooks"] = [hook]
+        opts["postprocessor_hooks"] = [pp_hook]
         with yt_dlp.YoutubeDL(opts) as ydl:
-            ydl.download([url])
-        files = [p for p in job_dir.iterdir()
-                 if p.is_file() and not p.name.endswith((".part", ".ytdl"))]
+            if playlist:
+                ydl.download(urls)
+            else:
+                for i, u in enumerate(urls, 1):
+                    state["item"] = i
+                    update(job_id, item=i, total=state["total"], message=prefix() + "Starting…")
+                    try:
+                        ydl.download([u])
+                    except Exception:
+                        if len(urls) == 1:
+                            raise
+                        state["failed"] += 1
+        files = collect_files(job_dir)
         if not files:
-            raise RuntimeError("Download finished but no file was produced.")
-        final = max(files, key=lambda p: p.stat().st_size)
-        update(job_id, status="done", progress=100, message="Ready", file=str(final))
+            extra = f" {state['failed']} item(s) failed." if state["failed"] else ""
+            raise RuntimeError("Download finished but no file was produced." + extra)
+        save_dir = validate_save_dir(o.get("save_dir"))
+        if save_dir:
+            for f in files:
+                shutil.copy2(f, save_dir / f.name)
+        msg = "Ready"
+        if state["failed"]:
+            msg += f" · {state['failed']} item(s) failed"
+        if save_dir:
+            msg += f" · copy saved to {save_dir}"
+        update(job_id, status="done", progress=100, message=msg, files=[str(f) for f in files],
+               item=state["item"], total=state["total"])
     except Exception as e:  # noqa: BLE001
         update(job_id, status="error", message=clean_error(e))
 
@@ -169,6 +442,23 @@ def restart_server():
     threading.Thread(target=server.shutdown, daemon=True).start()
 
 
+def get_job(job_id):
+    if not re.fullmatch(r"[0-9a-f]{32}", job_id):
+        return None
+    with jobs_lock:
+        return dict(jobs[job_id]) if job_id in jobs else None
+
+
+def file_list(job):
+    out = []
+    for i, f in enumerate(job.get("files") or []):
+        p = Path(f)
+        out.append({"index": i, "name": p.name, "size": p.stat().st_size if p.is_file() else None})
+    return out
+
+
+# ---------- routes ----------
+
 @app.get("/")
 def index():
     return render_template("index.html")
@@ -181,12 +471,8 @@ def sites():
 
 @app.get("/api/settings")
 def api_settings():
-    return jsonify(
-        ytdlp_version=yt_dlp.version.__version__,
-        cookies_file=COOKIES_FILE.is_file(),
-        browsers=list(BROWSERS),
-        sites=len(SITES),
-    )
+    return jsonify(ytdlp_version=yt_dlp.version.__version__, cookies_file=COOKIES_FILE.is_file(),
+                   browsers=list(BROWSERS), sites=len(SITES))
 
 
 @app.post("/api/update")
@@ -215,65 +501,70 @@ def api_update():
 @app.post("/api/info")
 def api_info():
     data = request.get_json(silent=True) or {}
-    url = (data.get("url") or "").strip()
-    source = str(data.get("cookies") or "")
-    if not valid_url(url):
-        return jsonify(error="Please enter a valid http(s) link."), 400
+    text = str(data.get("url") or "").strip()
+    if not text:
+        return jsonify(error="Paste a link or type something to search."), 400
     try:
-        opts = base_opts(source)
-        opts["skip_download"] = True
-        with yt_dlp.YoutubeDL(opts) as ydl:
-            info = ydl.extract_info(url, download=False)
+        opts = connection_opts(data)
     except ValueError as e:
         return jsonify(error=str(e)), 400
+    opts["skip_download"] = True
+    urls = split_urls(text)
+    if len(urls) > 1:
+        return jsonify(type="batch", urls=urls[:MAX_BATCH])
+    if urls:
+        target = urls[0]
+        opts.update({"noplaylist": not data.get("playlist"), "extract_flat": "in_playlist",
+                     "playlistend": MAX_PLAYLIST})
+    else:
+        target = f"ytsearch12:{text}"
+        opts["extract_flat"] = "in_playlist"
+    try:
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            info = ydl.extract_info(target, download=False)
     except Exception as e:  # noqa: BLE001
         return jsonify(error=clean_error(e)), 400
-    if info.get("_type") == "playlist" and info.get("entries"):
-        info = next((e for e in info["entries"] if e), info)
-    heights = sorted({f.get("height") for f in info.get("formats", [])
-                      if f.get("height") and f.get("vcodec") not in (None, "none")},
-                     reverse=True)
-    return jsonify(
-        title=info.get("title"),
-        thumbnail=info.get("thumbnail"),
-        duration=info.get("duration"),
-        uploader=info.get("uploader") or info.get("channel"),
-        site=info.get("extractor_key"),
-        heights=heights,
-        url=info.get("webpage_url") or url,
-    )
+    if not info:
+        return jsonify(error="Nothing found for that link."), 400
+    if not urls:
+        return jsonify(type="search", query=text, results=entries_of(info))
+    if info.get("_type") == "playlist":
+        entries = entries_of(info)
+        return jsonify(type="playlist", title=info.get("title"),
+                       uploader=info.get("uploader") or info.get("channel"), site=info.get("extractor_key"),
+                       url=info.get("webpage_url") or target, entries=entries,
+                       truncated=len(entries) >= MAX_PLAYLIST)
+    return jsonify(video_payload(info, target))
 
 
 @app.post("/api/download")
 def api_download():
     data = request.get_json(silent=True) or {}
-    url = (data.get("url") or "").strip()
-    choice = str(data.get("format") or "best")
-    source = str(data.get("cookies") or "")
-    if not valid_url(url):
+    o = data.get("options") or {}
+    urls = data.get("urls")
+    if not isinstance(urls, list):
+        urls = [data.get("url")]
+    urls = [str(u or "").strip() for u in urls][:MAX_BATCH]
+    if not urls or not all(valid_url(u) for u in urls):
         return jsonify(error="Please enter a valid http(s) link."), 400
-    if not (choice in ("best", "audio") or choice.isdigit()):
-        return jsonify(error="Unknown format."), 400
+    playlist = bool(data.get("playlist"))
+    if playlist and len(urls) != 1:
+        return jsonify(error="A playlist download takes exactly one link."), 400
     try:
-        cookie_opts(source)
+        base = connection_opts(data)
+        validate_save_dir(o.get("save_dir"))
+        ydl_options(DOWNLOAD_DIR, base, o, playlist)  # validate the options up front
     except ValueError as e:
         return jsonify(error=str(e)), 400
     job_id = uuid.uuid4().hex
     job_dir = DOWNLOAD_DIR / job_id
     job_dir.mkdir()
     with jobs_lock:
-        jobs[job_id] = {"status": "starting", "progress": 0, "message": "Starting…",
-                        "file": None, "created": time.time()}
-    threading.Thread(target=run_download, args=(job_id, job_dir, url, choice, source),
-                     daemon=True).start()
+        jobs[job_id] = {"status": "starting", "progress": 0, "message": "Starting…", "files": [],
+                        "item": 0, "total": None, "created": time.time(),
+                        "title": str(o.get("title") or urls[0])[:200]}
+    threading.Thread(target=run_job, args=(job_id, job_dir, urls, base, o, playlist), daemon=True).start()
     return jsonify(job_id=job_id)
-
-
-def get_job(job_id):
-    if not re.fullmatch(r"[0-9a-f]{32}", job_id):
-        return None
-    with jobs_lock:
-        return dict(jobs[job_id]) if job_id in jobs else None
 
 
 @app.get("/api/progress/<job_id>")
@@ -282,18 +573,44 @@ def api_progress(job_id):
     if not job:
         return jsonify(error="Unknown download."), 404
     return jsonify(status=job["status"], progress=job["progress"], message=job["message"],
-                   filename=Path(job["file"]).name if job["file"] else None)
+                   item=job.get("item"), total=job.get("total"), files=file_list(job))
 
 
-@app.get("/api/file/<job_id>")
-def api_file(job_id):
+@app.get("/api/file/<job_id>/<int:index>")
+def api_file(job_id, index):
     job = get_job(job_id)
-    if not job or job["status"] != "done" or not job["file"]:
+    if not job or job["status"] != "done" or index >= len(job["files"]):
         abort(404)
-    path = Path(job["file"]).resolve()
+    path = Path(job["files"][index]).resolve()
     if not path.is_file() or DOWNLOAD_DIR.resolve() not in path.parents:
         abort(404)
     return send_file(path, as_attachment=True, download_name=path.name)
+
+
+@app.get("/api/zip/<job_id>")
+def api_zip(job_id):
+    job = get_job(job_id)
+    if not job or job["status"] != "done" or not job["files"]:
+        abort(404)
+    zpath = DOWNLOAD_DIR / job_id / "_all.zip"
+    with zip_lock:
+        if not zpath.exists():
+            tmp = zpath.with_name("_all.zip.part")
+            with zipfile.ZipFile(tmp, "w", zipfile.ZIP_STORED) as z:
+                for f in job["files"]:
+                    if Path(f).is_file():
+                        z.write(f, Path(f).name)
+            tmp.rename(zpath)
+    return send_file(zpath, as_attachment=True, download_name=safe_name(job["title"]) + ".zip")
+
+
+@app.get("/api/history")
+def api_history():
+    with jobs_lock:
+        done = [dict(v, job_id=k) for k, v in jobs.items() if v["status"] == "done"]
+    done.sort(key=lambda j: j["created"], reverse=True)
+    return jsonify(items=[{"job_id": j["job_id"], "title": j["title"], "created": j["created"],
+                           "files": file_list(j)} for j in done[:MAX_HISTORY]])
 
 
 if __name__ == "__main__":

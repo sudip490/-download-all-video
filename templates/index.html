@@ -9,98 +9,170 @@
           --accent:#3b82f6; --accent-hover:#2563eb; --ok:#22c55e; --err:#ef4444; }
   * { box-sizing:border-box; }
   body { margin:0; font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; background:var(--bg);
-         color:var(--text); min-height:100vh; display:flex; flex-direction:column; align-items:center; padding:48px 16px; }
+         color:var(--text); min-height:100vh; display:flex; flex-direction:column; align-items:center; padding:40px 16px; }
   h1 { margin:0 0 6px; font-size:1.9rem; }
-  .sub { color:var(--muted); margin:0 0 28px; }
-  .wrap { width:100%; max-width:640px; }
+  .sub { color:var(--muted); margin:0 0 22px; }
+  .wrap { width:100%; max-width:720px; }
   .row { display:flex; gap:8px; }
-  input[type=url] { flex:1; padding:12px 14px; border-radius:8px; border:1px solid var(--border);
-                    background:var(--card); color:var(--text); font-size:1rem; }
+  input, select { padding:10px 12px; border-radius:8px; border:1px solid var(--border);
+                  background:var(--card); color:var(--text); font-size:.95rem; width:100%; }
+  #url { padding:12px 14px; font-size:1rem; }
   input:focus, select:focus { outline:2px solid var(--accent); border-color:transparent; }
   button { padding:12px 18px; border:0; border-radius:8px; background:var(--accent); color:#fff;
-           font-size:1rem; font-weight:600; cursor:pointer; }
+           font-size:1rem; font-weight:600; cursor:pointer; white-space:nowrap; }
   button:hover { background:var(--accent-hover); }
   button:disabled { opacity:.55; cursor:not-allowed; }
-  button.small { padding:6px 10px; font-size:.8rem; font-weight:500; }
-  .settings { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;
-              margin-top:12px; color:var(--muted); font-size:.85rem; }
-  .settings label { display:flex; align-items:center; gap:8px; }
-  .settings select { padding:6px 8px; border-radius:6px; border:1px solid var(--border);
-                     background:var(--card); color:var(--text); font-size:.85rem; }
-  .hint { color:var(--muted); font-size:.8rem; margin:6px 0 0; }
-  .card { margin-top:20px; background:var(--card); border:1px solid var(--border); border-radius:12px; padding:16px; }
+  button.small { padding:5px 10px; font-size:.8rem; font-weight:500; }
+  button.ghost { background:transparent; border:1px solid var(--border); color:var(--text); font-weight:500; padding:5px 10px; font-size:.8rem; }
+  button.ghost:hover { background:var(--card); }
+  details.settings { margin-top:12px; background:var(--card); border:1px solid var(--border); border-radius:10px; padding:10px 14px; }
+  details.settings summary { cursor:pointer; color:var(--muted); font-size:.9rem; display:flex; align-items:center; gap:10px; }
+  details.settings summary .spacer { flex:1; }
+  details.settings .grid2 { margin-top:12px; }
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:12px; }
+  .grid3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; margin-top:12px; }
+  .field label { display:block; font-size:.78rem; color:var(--muted); margin-bottom:4px; }
+  .field .chk { display:flex; align-items:center; gap:8px; color:var(--text); font-size:.9rem; padding:10px 0; }
+  .field .chk input { width:auto; }
+  .hint { color:var(--muted); font-size:.8rem; margin:8px 0 0; }
+  .card { margin-top:16px; background:var(--card); border:1px solid var(--border); border-radius:12px; padding:16px; }
   .info { display:flex; gap:14px; }
   .info img { width:160px; height:90px; object-fit:cover; border-radius:8px; background:#000; flex-shrink:0; }
   .title { font-weight:600; margin:0 0 4px; line-height:1.3; }
   .meta { color:var(--muted); font-size:.9rem; margin:0; }
-  .controls { display:flex; gap:8px; margin-top:14px; }
-  .controls select { flex:1; padding:11px 12px; border-radius:8px; border:1px solid var(--border);
-                     background:var(--bg); color:var(--text); font-size:1rem; }
+  .toolbar { display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:8px; }
+  .list { max-height:340px; overflow:auto; border:1px solid var(--border); border-radius:8px; background:var(--bg); }
+  .item { display:flex; gap:10px; align-items:center; padding:8px 10px; border-bottom:1px solid var(--border); }
+  .item:last-child { border-bottom:0; }
+  .item.click { cursor:pointer; } .item.click:hover { background:var(--card); }
+  .item img { width:96px; height:54px; object-fit:cover; border-radius:4px; background:#000; flex-shrink:0; }
+  .item input { width:auto; }
+  .item .t { flex:1; min-width:0; }
+  .item .t p { margin:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .item .d { color:var(--muted); font-size:.8rem; }
+  .fbox { max-height:260px; overflow:auto; border:1px solid var(--border); border-radius:8px; margin-top:10px; background:var(--bg); }
+  table.formats { width:100%; border-collapse:collapse; font-size:.83rem; }
+  table.formats th, table.formats td { padding:6px 8px; text-align:left; border-bottom:1px solid var(--border); white-space:nowrap; }
+  table.formats th { color:var(--muted); font-weight:500; position:sticky; top:0; background:var(--card); }
+  table.formats tr:hover td { background:var(--card); }
+  table.formats input { width:auto; }
+  .checks { display:flex; flex-wrap:wrap; gap:14px; margin-top:14px; font-size:.9rem; }
+  .checks label { display:flex; align-items:center; gap:6px; }
+  .checks input { width:auto; }
+  .controls { margin-top:14px; display:flex; justify-content:flex-end; }
   .bar { height:10px; background:var(--bg); border-radius:999px; overflow:hidden; margin-top:14px; }
   .bar > div { height:100%; width:0; background:var(--accent); transition:width .3s; }
   .msg { color:var(--muted); font-size:.9rem; margin:8px 0 0; }
-  .error { margin-top:16px; padding:12px 14px; border-radius:8px; background:rgba(239,68,68,.12);
-           border:1px solid var(--err); color:#fca5a5; }
-  .notice { margin-top:16px; padding:12px 14px; border-radius:8px; background:rgba(34,197,94,.12);
-            border:1px solid var(--ok); color:#bbf7d0; }
-  .done a { display:inline-block; margin-top:10px; padding:10px 16px; border-radius:8px;
-            background:var(--ok); color:#052e16; font-weight:600; text-decoration:none; }
+  .error { margin-top:16px; padding:12px 14px; border-radius:8px; background:rgba(239,68,68,.12); border:1px solid var(--err); color:#fca5a5; }
+  .notice { margin-top:16px; padding:12px 14px; border-radius:8px; background:rgba(34,197,94,.12); border:1px solid var(--ok); color:#bbf7d0; }
+  .files { margin-top:10px; display:flex; flex-direction:column; gap:6px; }
+  .files a, .hist a { color:var(--text); text-decoration:none; padding:8px 10px; border-radius:6px; background:var(--bg); display:flex; justify-content:space-between; gap:10px; }
+  .files a:hover, .hist a:hover { outline:1px solid var(--accent); }
+  .files a span, .hist a span { color:var(--muted); font-size:.8rem; white-space:nowrap; }
+  .files a b { font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  a.big { display:inline-block; margin-top:10px; padding:10px 16px; border-radius:8px; background:var(--ok); color:#052e16; font-weight:600; text-decoration:none; }
+  .hist .h { margin-top:10px; } .hist .h p { margin:0 0 4px; font-size:.9rem; } .hist .h .when { color:var(--muted); font-size:.78rem; }
   .foot { color:var(--muted); font-size:.8rem; margin-top:32px; text-align:center; line-height:1.6; }
   .foot a { color:var(--accent); }
-  @media (max-width:480px) { .info { flex-direction:column; } .info img { width:100%; height:auto; } .row { flex-direction:column; } }
+  @media (max-width:560px) { .info { flex-direction:column; } .info img { width:100%; height:auto; }
+    .row { flex-direction:column; } .grid2, .grid3 { grid-template-columns:1fr; } }
 </style>
 </head>
 <body>
 <div class="wrap">
   <h1>Video Downloader</h1>
-  <p class="sub">Paste a link from YouTube, Facebook, Instagram, TikTok, X, Vimeo and many other sites.</p>
+  <p class="sub">Paste one link, several links, or type words to search YouTube.</p>
 
   <form id="urlForm" class="row">
-    <input id="url" type="url" placeholder="https://..." required autofocus autocomplete="off">
+    <input id="url" type="text" placeholder="https://...   or   search words" required autofocus autocomplete="off">
     <button id="fetchBtn" type="submit">Fetch</button>
   </form>
 
-  <div class="settings">
-    <label>Login cookies
-      <select id="cookies">
-        <option value="">Not needed</option>
-        <option value="file">cookies.txt file</option>
-        <option value="firefox">From Firefox</option>
-        <option value="chrome">From Chrome</option>
-        <option value="chromium">From Chromium</option>
-        <option value="brave">From Brave</option>
-        <option value="edge">From Edge</option>
-        <option value="opera">From Opera</option>
-        <option value="vivaldi">From Vivaldi</option>
-      </select>
-    </label>
-    <span>yt-dlp <span id="ver">…</span> <button id="updBtn" class="small" type="button">Update</button></span>
-  </div>
-  <p class="hint">Pick a browser you are logged into for private, age-restricted or followers-only videos.</p>
+  <details class="settings">
+    <summary>Settings <span class="spacer"></span> <span>yt-dlp <span id="ver">…</span></span> <button id="updBtn" class="small" type="button">Update</button></summary>
+    <div class="grid2">
+      <div class="field"><label>Login cookies</label>
+        <select id="cookies">
+          <option value="">Not needed</option>
+          <option value="file">cookies.txt file</option>
+          <option value="firefox">From Firefox</option>
+          <option value="chrome">From Chrome</option>
+          <option value="chromium">From Chromium</option>
+          <option value="brave">From Brave</option>
+          <option value="edge">From Edge</option>
+          <option value="opera">From Opera</option>
+          <option value="vivaldi">From Vivaldi</option>
+        </select></div>
+      <div class="field"><label>Proxy (optional)</label><input id="proxy" placeholder="http://host:port or socks5://host:port"></div>
+      <div class="field"><label>Also save a copy to this folder (optional)</label><input id="saveDir" placeholder="/home/you/Videos"></div>
+      <div class="field"><label>Blocked by the site?</label><label class="chk"><input type="checkbox" id="impersonate"> Pretend to be Chrome</label></div>
+    </div>
+    <p class="hint">Cookies unlock private, age-restricted or followers-only videos. Impersonation helps with sites that block downloaders.</p>
+  </details>
 
   <div id="error" class="error" hidden></div>
   <div id="notice" class="notice" hidden></div>
 
   <div id="result" class="card" hidden>
-    <div class="info">
+    <div id="videoHead" class="info" hidden>
       <img id="thumb" alt="">
-      <div>
+      <div style="min-width:0">
         <p id="title" class="title"></p>
         <p id="meta" class="meta"></p>
+        <p id="plHint" class="hint" hidden><a href="#" id="plLink" style="color:var(--accent)">This video is part of a playlist. Fetch the whole playlist instead</a></p>
       </div>
     </div>
-    <div class="controls">
-      <select id="format"></select>
-      <button id="dlBtn" type="button">Download</button>
+
+    <div id="listBox" hidden>
+      <div class="toolbar">
+        <p id="listTitle" class="title" style="margin:0"></p>
+        <span id="listTools"><button class="ghost" id="selAll" type="button">All</button> <button class="ghost" id="selNone" type="button">None</button></span>
+      </div>
+      <div id="list" class="list"></div>
+      <p id="listNote" class="hint"></p>
     </div>
+
+    <div id="options" hidden>
+      <div class="grid3">
+        <div class="field"><label>Quality</label><select id="quality"></select></div>
+        <div class="field" id="containerField"><label>Container</label>
+          <select id="container"><option value="mp4">MP4</option><option value="mkv">MKV</option><option value="webm">WebM</option><option value="original">Original</option></select></div>
+        <div class="field" id="audioField" hidden><label>Audio format</label>
+          <select id="audioFormat"><option value="mp3">MP3</option><option value="m4a">M4A</option><option value="opus">Opus</option><option value="flac">FLAC</option><option value="wav">WAV</option><option value="original">Original</option></select></div>
+      </div>
+      <div id="formatsBox" class="fbox" hidden>
+        <table class="formats"><thead><tr><th></th><th>ID</th><th>Type</th><th>Resolution</th><th>Codecs</th><th>Ext</th><th>Size</th></tr></thead><tbody id="formatsBody"></tbody></table>
+      </div>
+      <div class="grid2" id="subsRow" hidden>
+        <div class="field"><label>Subtitles</label><select id="subsLang"><option value="">None</option></select></div>
+        <div class="field"><label>Subtitle mode</label><select id="subsMode"><option value="embed">Embed in video</option><option value="separate">Separate .srt file</option></select></div>
+      </div>
+      <div class="grid2" id="clipRow" hidden>
+        <div class="field"><label>Clip start (optional)</label><input id="clipStart" placeholder="e.g. 1:30"></div>
+        <div class="field"><label>Clip end (optional)</label><input id="clipEnd" placeholder="e.g. 2:45"></div>
+      </div>
+      <div class="checks">
+        <label><input type="checkbox" id="embed" checked> Embed thumbnail &amp; metadata</label>
+        <label><input type="checkbox" id="sponsorblock"> Remove sponsor segments (YouTube)</label>
+        <label id="splitLabel" hidden><input type="checkbox" id="split"> Split into chapters (<span id="chapCount"></span>)</label>
+      </div>
+      <div class="controls"><button id="dlBtn" type="button">Download</button></div>
+    </div>
+
     <div id="progress" hidden>
       <div class="bar"><div id="barFill"></div></div>
       <p id="msg" class="msg"></p>
     </div>
-    <div id="done" class="done" hidden>
-      <p class="msg">Your file is ready. If the download did not start by itself, click below.</p>
-      <a id="fileLink" href="#">Save file</a>
+    <div id="done" hidden>
+      <p id="doneMsg" class="msg"></p>
+      <div id="files" class="files"></div>
+      <a id="zipLink" class="big" href="#" hidden>Download all as ZIP</a>
     </div>
+  </div>
+
+  <div id="historyBox" class="card hist" hidden>
+    <p class="title">Recent downloads <span class="meta" style="font-weight:400">(kept for one hour)</span></p>
+    <div id="history"></div>
   </div>
 
   <p class="foot">Runs locally on your computer · <a href="/sites">See all supported sites</a><br>Only download videos you own or have permission to save.</p>
@@ -108,150 +180,285 @@
 
 <script>
 const $ = (s) => document.querySelector(s);
-let info = null, timer = null;
+const S = { cur: null, timer: null, fmt: null, mode: 'single', kind: 'video' };
+const HEIGHTS = [2160, 1440, 1080, 720, 480, 360, 240, 144];
 
-function showError(text) { $('#error').textContent = text; $('#error').hidden = false; $('#notice').hidden = true; }
+function showError(t) { $('#error').textContent = t; $('#error').hidden = false; $('#notice').hidden = true; }
 function hideError() { $('#error').hidden = true; }
-function showNotice(text) { $('#notice').textContent = text; $('#notice').hidden = false; }
-
+function showNotice(t) { $('#notice').textContent = t; $('#notice').hidden = false; }
 function fmtDuration(s) {
+  if (s == null) return '';
   s = Math.round(s);
   const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
-  const mm = h ? String(m).padStart(2, '0') : String(m);
-  return (h ? h + ':' : '') + mm + ':' + String(sec).padStart(2, '0');
+  return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(sec).padStart(2, '0');
 }
-
+function fmtSize(n) {
+  if (!n) return '';
+  const u = ['B', 'KB', 'MB', 'GB']; let i = 0;
+  while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
+  return (i ? n.toFixed(1) : n) + ' ' + u[i];
+}
+function el(tag, attrs, ...children) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) { if (k === 'class') e.className = v; else if (k.startsWith('on')) e.addEventListener(k.slice(2), v); else e.setAttribute(k, v); }
+  for (const c of children) e.append(c);
+  return e;
+}
 async function api(path, body) {
-  const r = await fetch(path, body === undefined ? {} : {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
-  });
+  const r = await fetch(path, body === undefined ? {} : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   const data = await r.json();
   if (!r.ok) throw new Error(data.error || 'Request failed.');
   return data;
 }
 
-// ---- settings: cookie source + yt-dlp version ----
-try { $('#cookies').value = localStorage.getItem('cookies') || ''; } catch (e) {}
-$('#cookies').addEventListener('change', () => { try { localStorage.setItem('cookies', $('#cookies').value); } catch (e) {} });
+// ---- settings (remembered in this browser) ----
+for (const id of ['cookies', 'proxy', 'saveDir']) {
+  try { $('#' + id).value = localStorage.getItem(id) || ''; } catch (e) {}
+  $('#' + id).addEventListener('change', () => { try { localStorage.setItem(id, $('#' + id).value); } catch (e) {} });
+}
+try { $('#impersonate').checked = localStorage.getItem('impersonate') === '1'; } catch (e) {}
+$('#impersonate').addEventListener('change', () => { try { localStorage.setItem('impersonate', $('#impersonate').checked ? '1' : ''); } catch (e) {} });
+function conn() { return { cookies: $('#cookies').value, proxy: $('#proxy').value.trim(), impersonate: $('#impersonate').checked }; }
 
 async function loadSettings() {
   const s = await api('/api/settings');
   $('#ver').textContent = s.ytdlp_version;
-  const fileOpt = $('#cookies option[value=file]');
-  fileOpt.textContent = s.cookies_file ? 'cookies.txt file' : 'cookies.txt file (not found)';
-  return s;
+  $('#cookies option[value=file]').textContent = s.cookies_file ? 'cookies.txt file' : 'cookies.txt file (not found)';
 }
 loadSettings().catch(() => { $('#ver').textContent = '?'; });
 
-$('#updBtn').addEventListener('click', async () => {
+$('#updBtn').addEventListener('click', async (e) => {
+  e.preventDefault(); e.stopPropagation();
   const btn = $('#updBtn');
-  btn.disabled = true; btn.textContent = 'Updating…';
-  hideError();
+  btn.disabled = true; btn.textContent = 'Updating…'; hideError();
   try {
     const r = await api('/api/update', {});
-    if (!r.restarting) {
-      showNotice('yt-dlp is already the latest version (' + r.after + ').');
-      btn.disabled = false; btn.textContent = 'Update';
-      return;
-    }
+    if (!r.restarting) { showNotice('yt-dlp is already the latest version (' + r.after + ').'); return; }
     showNotice('Updated yt-dlp ' + r.before + ' → ' + r.after + '. Restarting…');
     await new Promise(res => setTimeout(res, 2500));
-    for (let i = 0; i < 20; i++) {
-      try { await loadSettings(); break; } catch (e) { await new Promise(res => setTimeout(res, 1000)); }
-    }
+    for (let i = 0; i < 20; i++) { try { await loadSettings(); break; } catch (err) { await new Promise(res => setTimeout(res, 1000)); } }
     showNotice('Updated to yt-dlp ' + r.after + ' and restarted.');
-  } catch (err) {
-    showError(err.message);
-  } finally {
-    btn.disabled = false; btn.textContent = 'Update';
-  }
+  } catch (err) { showError(err.message); }
+  finally { btn.disabled = false; btn.textContent = 'Update'; }
 });
 
-// ---- fetch info ----
-$('#urlForm').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  hideError();
-  $('#notice').hidden = true;
-  clearInterval(timer);
+// ---- fetch ----
+$('#urlForm').addEventListener('submit', (e) => { e.preventDefault(); fetchInfo($('#url').value.trim(), false); });
+$('#plLink').addEventListener('click', (e) => { e.preventDefault(); fetchInfo($('#url').value.trim(), true); });
+
+async function fetchInfo(text, playlist) {
+  hideError(); $('#notice').hidden = true; clearInterval(S.timer);
   $('#result').hidden = true;
-  const btn = $('#fetchBtn');
-  btn.disabled = true; btn.textContent = 'Fetching…';
+  const btn = $('#fetchBtn'); btn.disabled = true; btn.textContent = 'Fetching…';
   try {
-    info = await api('/api/info', { url: $('#url').value.trim(), cookies: $('#cookies').value });
-    renderInfo(info);
-  } catch (err) {
-    showError(err.message);
-  } finally {
-    btn.disabled = false; btn.textContent = 'Fetch';
-  }
-});
+    const d = await api('/api/info', { url: text, playlist, ...conn() });
+    S.cur = d; S.fmt = null;
+    render(d);
+  } catch (err) { showError(err.message); }
+  finally { btn.disabled = false; btn.textContent = 'Fetch'; }
+}
 
-function renderInfo(d) {
-  $('#thumb').src = d.thumbnail || '';
-  $('#thumb').hidden = !d.thumbnail;
-  $('#title').textContent = d.title || 'Untitled';
-  const parts = [d.site, d.uploader, d.duration ? fmtDuration(d.duration) : null].filter(Boolean);
-  $('#meta').textContent = parts.join(' · ');
-  const sel = $('#format');
-  sel.innerHTML = '';
-  const opts = [['best', 'Best quality (video + audio)']];
-  for (const h of d.heights || []) opts.push([String(h), h + 'p']);
-  opts.push(['audio', 'Audio only (MP3)']);
-  for (const [v, label] of opts) {
-    const o = document.createElement('option');
-    o.value = v; o.textContent = label; sel.appendChild(o);
-  }
-  $('#progress').hidden = true; $('#done').hidden = true;
-  $('#dlBtn').disabled = false;
+function render(d) {
+  for (const s of ['#videoHead', '#listBox', '#options', '#progress', '#done', '#formatsBox', '#plHint']) $(s).hidden = true;
+  if (d.type === 'video') renderVideo(d);
+  else if (d.type === 'playlist') renderList(d.entries, d.title || 'Playlist', 'select', d);
+  else if (d.type === 'search') renderList(d.results, 'Search results for "' + d.query + '"', 'click', d);
+  else if (d.type === 'batch') renderBatch(d);
   $('#result').hidden = false;
+}
+
+function renderVideo(d) {
+  $('#thumb').src = d.thumbnail || ''; $('#thumb').hidden = !d.thumbnail;
+  $('#title').textContent = d.title || 'Untitled';
+  $('#meta').textContent = [d.site, d.uploader, d.duration ? fmtDuration(d.duration) : null].filter(Boolean).join(' · ');
+  $('#plHint').hidden = !d.in_playlist;
+  $('#videoHead').hidden = false;
+  setupOptions('single', d);
+}
+
+function renderList(items, title, mode, d) {
+  $('#listTitle').textContent = title;
+  $('#listTools').hidden = mode !== 'select';
+  const list = $('#list'); list.innerHTML = '';
+  if (!items.length) list.append(el('div', { class: 'item' }, el('div', { class: 't' }, el('p', { class: 'd' }, 'Nothing found.'))));
+  for (const it of items) {
+    const t = el('div', { class: 't' }, el('p', {}, it.title || ''), el('p', { class: 'd' }, [it.uploader, fmtDuration(it.duration)].filter(Boolean).join(' · ')));
+    const img = it.thumbnail ? el('img', { src: it.thumbnail, alt: '', loading: 'lazy' }) : el('div', { style: 'width:96px;height:54px;flex-shrink:0' });
+    if (mode === 'select') {
+      list.append(el('label', { class: 'item' }, el('input', { type: 'checkbox', checked: '', 'data-index': it.index }), img, t));
+    } else {
+      list.append(el('div', { class: 'item click', onclick: () => { $('#url').value = it.url; fetchInfo(it.url, false); } }, img, t));
+    }
+  }
+  const note = mode === 'select'
+    ? items.length + ' videos' + (d.truncated ? ' (first ' + items.length + ' shown)' : '') + (d.uploader ? ' · ' + d.uploader : '')
+    : 'Click a result to fetch it.';
+  $('#listNote').textContent = note;
+  $('#listBox').hidden = false;
+  if (mode === 'select') setupOptions('multi', d);
+}
+
+function renderBatch(d) {
+  $('#listTitle').textContent = d.urls.length + ' links';
+  $('#listTools').hidden = true;
+  const list = $('#list'); list.innerHTML = '';
+  for (const u of d.urls) list.append(el('div', { class: 'item' }, el('div', { class: 't' }, el('p', {}, u))));
+  $('#listNote').textContent = 'All links will be downloaded with the options below and delivered together.';
+  $('#listBox').hidden = false;
+  setupOptions('multi', d);
+}
+
+$('#selAll').addEventListener('click', () => document.querySelectorAll('#list input[type=checkbox]').forEach(c => c.checked = true));
+$('#selNone').addEventListener('click', () => document.querySelectorAll('#list input[type=checkbox]').forEach(c => c.checked = false));
+
+// ---- options ----
+function setupOptions(mode, d) {
+  S.mode = mode; S.fmt = null;
+  const q = $('#quality'); q.innerHTML = '';
+  const add = (v, t) => q.append(el('option', { value: v }, t));
+  add('best', 'Best quality (video + audio)');
+  for (const h of (mode === 'single' ? (d.heights || []) : HEIGHTS)) add(String(h), h + 'p');
+  add('audio', 'Audio only');
+  if (mode === 'single' && d.formats && d.formats.length) add('custom', 'Choose exact format…');
+  q.value = 'best';
+  const sl = $('#subsLang'); sl.innerHTML = ''; sl.append(el('option', { value: '' }, 'None'));
+  if (mode === 'single') for (const s of (d.subs || [])) {
+    const o = el('option', { value: s.lang }, s.name + ' (' + s.lang + ')' + (s.auto ? ' · auto' : ''));
+    if (s.auto) o.dataset.auto = '1';
+    sl.append(o);
+  }
+  $('#clipStart').value = ''; $('#clipEnd').value = ''; $('#split').checked = false;
+  $('#chapCount').textContent = (d.chapters || 0) + ' chapters';
+  renderFormats(mode === 'single' ? (d.formats || []) : []);
+  updateKind();
+  $('#options').hidden = false;
+}
+
+function renderFormats(formats) {
+  const body = $('#formatsBody'); body.innerHTML = '';
+  for (const f of formats) {
+    const type = f.video && f.audio ? 'Video + audio' : f.video ? 'Video only' : 'Audio only';
+    const res = f.height ? f.height + 'p' + (f.fps ? ' ' + Math.round(f.fps) + 'fps' : '') : (f.note || '');
+    const codecs = [f.vcodec, f.acodec].filter(Boolean).join(' + ');
+    const radio = el('input', { type: 'radio', name: 'fid', onchange: () => { S.fmt = f; updateKind(); } });
+    const tr = el('tr', { onclick: () => { radio.checked = true; S.fmt = f; updateKind(); } },
+      el('td', {}, radio), el('td', {}, f.id), el('td', {}, type), el('td', {}, res), el('td', {}, codecs), el('td', {}, f.ext || ''), el('td', {}, fmtSize(f.size)));
+    body.append(tr);
+  }
+}
+
+function updateKind() {
+  const q = $('#quality').value;
+  $('#formatsBox').hidden = q !== 'custom';
+  let kind = 'video';
+  if (q === 'audio') kind = 'audio';
+  if (q === 'custom' && S.fmt && S.fmt.audio && !S.fmt.video) kind = 'audio';
+  S.kind = kind;
+  $('#containerField').hidden = kind !== 'video';
+  $('#audioField').hidden = kind !== 'audio';
+  $('#subsRow').hidden = !(S.mode === 'single' && kind === 'video' && (S.cur.subs || []).length);
+  $('#clipRow').hidden = S.mode !== 'single';
+  $('#splitLabel').hidden = !(S.mode === 'single' && kind === 'video' && S.cur.chapters > 0);
+}
+$('#quality').addEventListener('change', updateKind);
+
+function selectedItems() {
+  const idx = [...document.querySelectorAll('#list input[type=checkbox]:checked')].map(c => Number(c.dataset.index)).sort((a, b) => a - b);
+  if (!idx.length) throw new Error('Select at least one video.');
+  const ranges = []; let start = idx[0], prev = idx[0];
+  for (let i = 1; i <= idx.length; i++) {
+    if (i < idx.length && idx[i] === prev + 1) { prev = idx[i]; continue; }
+    ranges.push(start === prev ? String(start) : start + '-' + prev);
+    if (i < idx.length) { start = prev = idx[i]; }
+  }
+  return ranges.join(',');
+}
+
+function collectOptions() {
+  const q = $('#quality').value;
+  if (q === 'custom' && !S.fmt) throw new Error('Pick a format from the table first.');
+  const subOpt = $('#subsLang').selectedOptions[0];
+  return {
+    format: q === 'custom' ? 'id:' + S.fmt.id : q,
+    kind: S.kind,
+    needs_audio: !!(q === 'custom' && S.fmt.video && !S.fmt.audio),
+    container: $('#container').value,
+    audio_format: $('#audioFormat').value,
+    subs_lang: $('#subsRow').hidden ? '' : $('#subsLang').value,
+    subs_auto: !!(subOpt && subOpt.dataset.auto),
+    subs_mode: $('#subsMode').value,
+    clip_start: $('#clipRow').hidden ? '' : $('#clipStart').value.trim(),
+    clip_end: $('#clipRow').hidden ? '' : $('#clipEnd').value.trim(),
+    embed: $('#embed').checked,
+    sponsorblock: $('#sponsorblock').checked,
+    split_chapters: !$('#splitLabel').hidden && $('#split').checked,
+    save_dir: $('#saveDir').value.trim(),
+    title: S.cur.title || (S.cur.urls ? S.cur.urls.length + ' links' : 'Download'),
+    playlist_items: S.cur.type === 'playlist' ? selectedItems() : '',
+  };
 }
 
 // ---- download ----
 $('#dlBtn').addEventListener('click', async () => {
   hideError();
-  $('#dlBtn').disabled = true;
   $('#done').hidden = true;
-  $('#progress').hidden = false;
-  $('#barFill').style.width = '0%';
-  $('#msg').textContent = 'Starting…';
   try {
-    const r = await api('/api/download', { url: info.url, format: $('#format').value, cookies: $('#cookies').value });
+    const options = collectOptions();
+    const body = { options, ...conn() };
+    if (S.cur.type === 'batch') body.urls = S.cur.urls;
+    else { body.url = S.cur.url; body.playlist = S.cur.type === 'playlist'; }
+    $('#dlBtn').disabled = true;
+    $('#progress').hidden = false; $('#barFill').style.width = '0%'; $('#msg').textContent = 'Starting…';
+    const r = await api('/api/download', body);
     poll(r.job_id);
   } catch (err) {
-    showError(err.message);
-    $('#progress').hidden = true;
-    $('#dlBtn').disabled = false;
+    showError(err.message); $('#progress').hidden = true; $('#dlBtn').disabled = false;
   }
 });
 
 function poll(jobId) {
-  clearInterval(timer);
-  timer = setInterval(async () => {
+  clearInterval(S.timer);
+  S.timer = setInterval(async () => {
     try {
       const j = await api('/api/progress/' + jobId);
       $('#barFill').style.width = (j.progress || 0) + '%';
       $('#msg').textContent = j.message || '';
-      if (j.status === 'done') {
-        clearInterval(timer);
-        const href = '/api/file/' + jobId;
-        $('#fileLink').href = href;
-        $('#done').hidden = false;
-        $('#dlBtn').disabled = false;
-        window.location.href = href;
-      } else if (j.status === 'error') {
-        clearInterval(timer);
-        showError(j.message || 'Download failed.');
-        $('#progress').hidden = true;
-        $('#dlBtn').disabled = false;
-      }
-    } catch (err) {
-      clearInterval(timer);
-      showError(err.message);
-      $('#progress').hidden = true;
-      $('#dlBtn').disabled = false;
-    }
+      if (j.status === 'done') { clearInterval(S.timer); showDone(jobId, j); }
+      else if (j.status === 'error') { clearInterval(S.timer); showError(j.message || 'Download failed.'); $('#progress').hidden = true; $('#dlBtn').disabled = false; }
+    } catch (err) { clearInterval(S.timer); showError(err.message); $('#progress').hidden = true; $('#dlBtn').disabled = false; }
   }, 700);
 }
+
+function fileLinks(jobId, files) {
+  return files.map(f => el('a', { href: '/api/file/' + jobId + '/' + f.index }, el('b', {}, f.name), el('span', {}, fmtSize(f.size))));
+}
+
+function showDone(jobId, j) {
+  $('#progress').hidden = true; $('#dlBtn').disabled = false;
+  $('#doneMsg').textContent = j.message + '. If the download did not start by itself, click a file below.';
+  const files = $('#files'); files.innerHTML = ''; fileLinks(jobId, j.files).forEach(a => files.append(a));
+  const zip = $('#zipLink'); zip.hidden = j.files.length < 2; zip.href = '/api/zip/' + jobId;
+  $('#done').hidden = false;
+  window.location.href = j.files.length === 1 ? '/api/file/' + jobId + '/0' : '/api/zip/' + jobId;
+  loadHistory();
+}
+
+// ---- history ----
+function ago(ts) { const m = Math.round((Date.now() / 1000 - ts) / 60); return m < 1 ? 'just now' : m < 60 ? m + ' min ago' : Math.round(m / 60) + ' h ago'; }
+async function loadHistory() {
+  try {
+    const h = await api('/api/history');
+    const box = $('#history'); box.innerHTML = '';
+    for (const it of h.items) {
+      const wrap = el('div', { class: 'h' }, el('p', {}, it.title + ' ', el('span', { class: 'when' }, ago(it.created))));
+      fileLinks(it.job_id, it.files).forEach(a => wrap.append(a));
+      if (it.files.length > 1) wrap.append(el('a', { href: '/api/zip/' + it.job_id }, el('b', {}, 'All files as ZIP'), el('span', {}, it.files.length + ' files')));
+      box.append(wrap);
+    }
+    $('#historyBox').hidden = !h.items.length;
+  } catch (e) {}
+}
+loadHistory();
 </script>
 </body>
 </html>
