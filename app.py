@@ -521,7 +521,8 @@ def require_password():
 
 @app.get("/healthz")
 def healthz():
-    return "ok"
+    commit = os.environ.get("RENDER_GIT_COMMIT", "")[:7]  # set by Render, lets us see which build is live
+    return f"ok {commit}".strip()
 
 
 @app.get("/")
