@@ -53,7 +53,51 @@ The app installs the newest yt-dlp and restarts itself. Or from a terminal:
 .venv/bin/pip install -U "yt-dlp[default,curl-cffi,secretstorage]"
 ```
 
-## First-time setup
+## Host it online (Render, free plan)
+
+The app needs a real server that runs all the time, with ffmpeg and disk space. Vercel, Netlify and similar
+"serverless" hosts cannot run it. Render's free plan can, straight from this GitHub repo.
+
+1. Go to https://render.com and sign up with your GitHub account.
+2. Click **New** → **Web Service**, pick this repository. Render detects the `Dockerfile`.
+3. Leave the instance type on **Free**.
+4. Under **Environment variables** add:
+   - `APP_PASSWORD` = a password of your choice (required, everyone must type it to use the site)
+   - `PUBLIC_MODE` = `1`
+5. Click **Deploy**. The first build takes a few minutes. Your site will be at `https://<name>.onrender.com`.
+
+Every `git push` to the repo redeploys automatically, which is also how yt-dlp gets updated.
+
+**Public mode** turns on safe defaults for a server on the internet:
+
+| Setting            | Default in public mode | Change with            |
+|--------------------|------------------------|------------------------|
+| Password           | required               | `APP_PASSWORD`         |
+| Max file size      | 2048 MB                | `MAX_FILESIZE_MB`      |
+| Downloads at once  | 2                      | `MAX_JOBS`             |
+| Playlist size      | 50 videos              | `MAX_PLAYLIST`         |
+| Files kept for     | 30 minutes             | `JOB_TTL_MINUTES`      |
+| Browser cookies, save-to-folder, self-update | off | (only in local mode) |
+
+Things to know about hosting:
+
+- **Free plan sleeps** after 15 minutes without visitors; the first visit afterwards takes about a minute to wake.
+- **YouTube blocks most cloud servers** ("Sign in to confirm you're not a bot"). Other sites usually work.
+  A proxy from the Settings panel can help. Running the app at home avoids this completely.
+- **Free disk is temporary.** Downloaded files disappear when the service restarts, which is fine since they are only kept briefly anyway.
+
+### Any other server (VPS with Docker)
+
+```sh
+git clone https://github.com/sudip490/-download-all-video.git
+cd -download-all-video
+docker build -t downloader .
+docker run -d --name downloader --restart unless-stopped -p 80:5000 -e APP_PASSWORD=choose-a-password downloader
+```
+
+Then open `http://<server-ip>/`.
+
+## First-time setup (on your own computer)
 
 ```sh
 python3 -m venv .venv

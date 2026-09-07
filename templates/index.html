@@ -107,7 +107,8 @@
       <div class="field"><label>Also save a copy to this folder (optional)</label><input id="saveDir" placeholder="/home/you/Videos"></div>
       <div class="field"><label>Blocked by the site?</label><label class="chk"><input type="checkbox" id="impersonate"> Pretend to be Chrome</label></div>
     </div>
-    <p class="hint">Cookies unlock private, age-restricted or followers-only videos. Impersonation helps with sites that block downloaders.</p>
+    <p class="hint" id="settingsHint">Cookies unlock private, age-restricted or followers-only videos. Impersonation helps with sites that block downloaders.</p>
+    <p class="hint" id="publicNote" hidden></p>
   </details>
 
   <div id="error" class="error" hidden></div>
@@ -224,6 +225,20 @@ async function loadSettings() {
   const s = await api('/api/settings');
   $('#ver').textContent = s.ytdlp_version;
   $('#cookies option[value=file]').textContent = s.cookies_file ? 'cookies.txt file' : 'cookies.txt file (not found)';
+  if (s.public) {
+    // Hosted on a server: browser cookies, save-folder and self-update are not available.
+    for (const o of $('#cookies').options) if (o.value && o.value !== 'file') o.hidden = true;
+    if ($('#cookies').value && $('#cookies').value !== 'file') $('#cookies').value = '';
+    $('#saveDir').closest('.field').hidden = true;
+    $('#updBtn').hidden = true;
+    const limits = [];
+    if (s.max_filesize_mb) limits.push('files up to ' + s.max_filesize_mb + ' MB');
+    if (s.max_jobs) limits.push(s.max_jobs + ' downloads at a time');
+    if (s.max_playlist) limits.push('playlists up to ' + s.max_playlist + ' videos');
+    limits.push('files kept for ' + s.ttl_minutes + ' minutes');
+    $('#publicNote').textContent = 'Hosted mode: ' + limits.join(', ') + '.';
+    $('#publicNote').hidden = false;
+  }
 }
 loadSettings().catch(() => { $('#ver').textContent = '?'; });
 

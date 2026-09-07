@@ -1,0 +1,12 @@
+# Render blueprint: https://render.com/docs/blueprint-spec
+services:
+  - type: web
+    name: download-all-video
+    runtime: docker
+    plan: free
+    healthCheckPath: /healthz
+    envVars:
+      - key: PUBLIC_MODE
+        value: "1"
+      - key: APP_PASSWORD
+        sync: false   # Render asks you to type the password when you create the service

@@ -1,0 +1,6 @@
+.venv/
+downloads/
+.git/
+__pycache__/
+cookies.txt
+*.md

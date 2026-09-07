@@ -1,4 +1,5 @@
 """Local video downloader: paste a link, pick options, get the file(s)."""
+import hmac
 import os
 import re
 import shutil
@@ -14,7 +15,7 @@ import yt_dlp
 from yt_dlp.extractor import gen_extractor_classes
 from yt_dlp.networking.impersonate import ImpersonateTarget
 from yt_dlp.utils import download_range_func
-from flask import Flask, abort, jsonify, render_template, request, send_file
+from flask import Flask, Response, abort, jsonify, render_template, request, send_file
 from werkzeug.serving import make_server
 
 # If launched from inside a Flatpak app (for example VS Code's terminal), XDG_CONFIG_HOME points at the
@@ -26,7 +27,21 @@ BASE_DIR = Path(__file__).resolve().parent
 DOWNLOAD_DIR = BASE_DIR / "downloads"
 COOKIES_FILE = BASE_DIR / "cookies.txt"
 DOWNLOAD_DIR.mkdir(exist_ok=True)
-JOB_TTL_SECONDS = 60 * 60  # finished downloads are deleted after one hour
+
+# ---- hosting configuration (environment variables) ----
+# PUBLIC_MODE=1   safe defaults for a server on the internet: password required, browser cookies,
+#                 save-folder and self-update disabled, size/time/concurrency limits applied.
+# APP_PASSWORD    when set, every page and API call needs this password (any username).
+# HOST / PORT     where to listen. PORT is set automatically by hosts like Render.
+def env_flag(name):
+    return os.environ.get(name, "").strip().lower() in ("1", "true", "yes", "on")
+
+PUBLIC_MODE = env_flag("PUBLIC_MODE")
+APP_PASSWORD = os.environ.get("APP_PASSWORD", "")
+JOB_TTL_SECONDS = int(os.environ.get("JOB_TTL_MINUTES", "30" if PUBLIC_MODE else "60")) * 60
+MAX_FILESIZE_MB = int(os.environ.get("MAX_FILESIZE_MB", "2048" if PUBLIC_MODE else "0"))  # 0 = no limit
+MAX_JOBS = int(os.environ.get("MAX_JOBS", "2" if PUBLIC_MODE else "0"))  # running at once, 0 = no limit
+MAX_PLAYLIST = int(os.environ.get("MAX_PLAYLIST", "50" if PUBLIC_MODE else "300"))
 BROWSERS = ("firefox", "chrome", "chromium", "brave", "edge", "opera", "vivaldi", "safari")
 YTDLP_PACKAGE = "yt-dlp[default,curl-cffi,secretstorage]"
 CONTAINERS = ("mp4", "mkv", "webm", "original")
@@ -35,7 +50,6 @@ SPONSOR_CATEGORIES = ["sponsor", "selfpromo", "interaction", "intro", "outro", "
 THUMB_OK = {"mp3", "mkv", "mka", "ogg", "opus", "flac", "m4a", "mp4", "m4v", "mov"}
 SKIP_SUFFIXES = (".part", ".ytdl", ".webp", ".jpg", ".jpeg", ".png", ".json", ".zip", ".temp")
 MAX_BATCH = 50
-MAX_PLAYLIST = 300
 MAX_HISTORY = 50
 SAVE_ROOTS = (Path.home(), Path("/media"), Path("/mnt"), Path("/run/media"))
 PP_NAMES = {
@@ -132,6 +146,8 @@ def validate_save_dir(value):
     s = str(value or "").strip()
     if not s:
         return None
+    if PUBLIC_MODE:
+        raise ValueError("Saving to a folder is disabled on a hosted server.")
     p = Path(s).expanduser()
     if not p.is_absolute():
         raise ValueError("Save folder must be a full path, for example /home/you/Videos.")
@@ -154,6 +170,8 @@ def cookie_opts(source):
                              "Export it from your browser first (see README).")
         return {"cookiefile": str(COOKIES_FILE)}
     if source in BROWSERS:
+        if PUBLIC_MODE:
+            raise ValueError("Browser cookies are not available on a hosted server. Use a cookies.txt file.")
         return {"cookiesfrombrowser": (source,)}
     raise ValueError("Unknown cookie source.")
 
@@ -209,6 +227,8 @@ def ydl_options(job_dir, base, o, playlist):
         "noplaylist": not playlist,
         "ignoreerrors": "only_download" if playlist else False,
     })
+    if MAX_FILESIZE_MB > 0:
+        opts["max_filesize"] = MAX_FILESIZE_MB * 1024 * 1024
     if playlist:
         items = re.sub(r"\s", "", str(o.get("playlist_items") or ""))
         if items:
@@ -400,6 +420,8 @@ def run_job(job_id, job_dir, urls, base, o, playlist):
         files = collect_files(job_dir)
         if not files:
             extra = f" {state['failed']} item(s) failed." if state["failed"] else ""
+            if MAX_FILESIZE_MB > 0:
+                extra += f" Files above {MAX_FILESIZE_MB} MB are skipped on this server; try a lower quality."
             raise RuntimeError("Download finished but no file was produced." + extra)
         save_dir = validate_save_dir(o.get("save_dir"))
         if save_dir:
@@ -459,6 +481,21 @@ def file_list(job):
 
 # ---------- routes ----------
 
+@app.before_request
+def require_password():
+    if not APP_PASSWORD or request.path == "/healthz":
+        return None
+    auth = request.authorization
+    if auth and auth.type == "basic" and hmac.compare_digest(auth.password or "", APP_PASSWORD):
+        return None
+    return Response("Password required.", 401, {"WWW-Authenticate": 'Basic realm="Video Downloader"'})
+
+
+@app.get("/healthz")
+def healthz():
+    return "ok"
+
+
 @app.get("/")
 def index():
     return render_template("index.html")
@@ -472,11 +509,15 @@ def sites():
 @app.get("/api/settings")
 def api_settings():
     return jsonify(ytdlp_version=yt_dlp.version.__version__, cookies_file=COOKIES_FILE.is_file(),
-                   browsers=list(BROWSERS), sites=len(SITES))
+                   browsers=list(BROWSERS), sites=len(SITES), public=PUBLIC_MODE,
+                   max_filesize_mb=MAX_FILESIZE_MB, max_playlist=MAX_PLAYLIST, max_jobs=MAX_JOBS,
+                   ttl_minutes=JOB_TTL_SECONDS // 60)
 
 
 @app.post("/api/update")
 def api_update():
+    if PUBLIC_MODE:
+        return jsonify(error="Self-update is disabled on a hosted server. Redeploy to update yt-dlp."), 403
     if not update_lock.acquire(blocking=False):
         return jsonify(error="An update is already running."), 409
     try:
@@ -557,12 +598,16 @@ def api_download():
     except ValueError as e:
         return jsonify(error=str(e)), 400
     job_id = uuid.uuid4().hex
-    job_dir = DOWNLOAD_DIR / job_id
-    job_dir.mkdir()
     with jobs_lock:
+        running = sum(1 for j in jobs.values() if j["status"] not in ("done", "error"))
+        if MAX_JOBS and running >= MAX_JOBS:
+            return jsonify(error=f"{running} download(s) already running on this server. "
+                                 "Please wait a minute and try again."), 429
         jobs[job_id] = {"status": "starting", "progress": 0, "message": "Starting…", "files": [],
                         "item": 0, "total": None, "created": time.time(),
                         "title": str(o.get("title") or urls[0])[:200]}
+    job_dir = DOWNLOAD_DIR / job_id
+    job_dir.mkdir()
     threading.Thread(target=run_job, args=(job_id, job_dir, urls, base, o, playlist), daemon=True).start()
     return jsonify(job_id=job_id)
 
@@ -618,9 +663,13 @@ if __name__ == "__main__":
         if leftover.is_dir():
             shutil.rmtree(leftover, ignore_errors=True)
     threading.Thread(target=cleanup_loop, daemon=True).start()
-    print(f"Video downloader running at http://127.0.0.1:5000  (yt-dlp {yt_dlp.version.__version__})",
-          flush=True)
-    server = make_server("127.0.0.1", 5000, app, threaded=True)
+    port = int(os.environ.get("PORT", "5000"))
+    host = os.environ.get("HOST") or ("0.0.0.0" if os.environ.get("PORT") else "127.0.0.1")
+    mode = "public mode" if PUBLIC_MODE else "local mode"
+    lock = "password required" if APP_PASSWORD else "no password"
+    print(f"Video downloader running at http://{host}:{port}  (yt-dlp {yt_dlp.version.__version__}, "
+          f"{mode}, {lock})", flush=True)
+    server = make_server(host, port, app, threaded=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
