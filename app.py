@@ -108,6 +108,12 @@ def clean_error(err):
                 "cookies exported from a browser where you are signed in to YouTube. "
                 + ("YouTube blocks most cloud servers, so running the app on your own computer is the reliable fix."
                    if PUBLIC_MODE else "Or pick your browser under 'Login cookies'."))
+    if "Unable to extract course id" in text:
+        return ("Udemy did not show the course page. On a hosted server this means Udemy's protection is "
+                "blocking the server address; use the app on your own computer for Udemy. It also happens when "
+                "the account is not logged in or not enrolled in the course.") if PUBLIC_MODE else (
+                "Udemy did not show the course page. Check that you are logged in (pick your browser under "
+                "'Login cookies') and that the course is in your account.")
     return text or "Something went wrong."
 
 
